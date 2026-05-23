@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/.nyc_output/
 
 # next.js
 /.next/
@@ -19,10 +22,28 @@
 
 # production
 /build
+/dist
+
+# package manager and build caches
+/.cache/
+/.turbo/
+/.parcel-cache/
+/.eslintcache
+.npm/
+.pnpm-store/
 
 # misc
 .DS_Store
 *.pem
+*.local
+
+# generated logs and diagnostics
+logs/
+*.log
+*.trace
+*.prof
+*.cpuprofile
+*.heapsnapshot
 
 # debug
 npm-debug.log*
@@ -36,6 +57,32 @@ yarn-error.log*
 # vercel
 .vercel
 
+# deployment provider state
+.netlify/
+.render/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local databases and large binary artifacts
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+*.tmp
+*.temp
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# local uploads, exports, and generated assets
+/uploads/
+/exports/
+/artifacts/
+/tmp/
+/temp/
