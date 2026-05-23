@@ -18,6 +18,8 @@ The submission should prove:
 
 Build toward a production-facing Next.js application. Prefer deterministic, reproducible, explicit implementations over clever abstractions. Keep contracts typed and avoid leaking raw external API responses through the app.
 
+Safety and compliance direction: preserve a path to secure containerized deployments, HIPAA readiness when matters include PHI or covered-entity/business-associate workflows, SOC 2 readiness, BAA availability for vendors that may process PHI, and zero data retention or equivalent no-training/no-retention modes for AI and document-processing providers. Do not claim HIPAA compliance, SOC 2 compliance, or BAA coverage unless the contracts, controls, scope, and audits are actually in place.
+
 Maintain documentation as the project matures. Keep `README.md` current and add or update `GUIDE.md` alongside it for non-marimo work. Documentation should clearly describe the problem, target users, tradeoffs, setup, test commands, deployment path, and future evolution.
 
 This is a Next.js 16 project. Before making framework-level changes, read the relevant local docs in `node_modules/next/dist/docs/` and treat them as authoritative.

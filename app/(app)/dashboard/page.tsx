@@ -1,5 +1,4 @@
 import { CaseTimeline } from "@/components/app/case-timeline";
-import { ChatInput } from "@/components/app/chat-input";
 
 export default function DashboardPage() {
   return (
@@ -17,8 +16,6 @@ export default function DashboardPage() {
       </div>
 
       <CaseTimeline />
-
-      <ChatInput />
     </div>
   );
 }

@@ -1,13 +1,19 @@
+import { connection } from "next/server";
 import Link from "next/link";
 
 import { AppFrame } from "@/components/app/app-frame";
 import { ModeSwitcher } from "@/components/app/mode-switcher";
+import { listCurrentUserCaseSummaries } from "@/lib/server/cases/service";
 
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await connection();
+
+  const cases = await listCurrentUserCaseSummaries();
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-ink text-paper">
       <header className="border-b border-paper/15">
@@ -21,7 +27,7 @@ export default function AppLayout({
         </div>
       </header>
       <main className="min-h-0 flex-1 overflow-hidden">
-        <AppFrame>{children}</AppFrame>
+        <AppFrame cases={cases}>{children}</AppFrame>
       </main>
     </div>
   );

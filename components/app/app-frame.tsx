@@ -3,8 +3,11 @@
 import {
   Eye,
   FileText,
+  FolderOpen,
+  Landmark,
   PanelLeftClose,
   PanelLeftOpen,
+  Plane,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -13,24 +16,25 @@ import { useDropzone } from "react-dropzone";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { CaseSummaryDto, CaseType } from "@/lib/contracts/cases";
 import { cn } from "@/lib/utils";
-
-const cases = [
-  { href: "/case/acme-v-glade", label: "Acme v. Glade" },
-  { href: "/case/rivera-intake", label: "Rivera intake" },
-  { href: "/case/northstar-review", label: "Northstar review" },
-  { href: "/case/atlas-filing", label: "Atlas filing" },
-];
 
 function getFileKey(file: File) {
   return `${file.name}-${file.lastModified}`;
 }
 
 type AppFrameProps = {
+  cases: CaseSummaryDto[];
   children: React.ReactNode;
 };
 
-export function AppFrame({ children }: AppFrameProps) {
+const caseTypeIcons = {
+  bankruptcy: Landmark,
+  immigration: Plane,
+  general: FolderOpen,
+} satisfies Record<CaseType, React.ComponentType<{ className?: string }>>;
+
+export function AppFrame({ cases, children }: AppFrameProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [ingestedFiles, setIngestedFiles] = React.useState<File[]>([]);
   const [selectedFileKey, setSelectedFileKey] = React.useState<string | null>(
@@ -84,15 +88,29 @@ export function AppFrame({ children }: AppFrameProps) {
             aria-label="Cases"
             className="flex max-h-[calc(100vh-13rem)] flex-col gap-2 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {cases.map((caseItem) => (
-              <Link
-                className="border border-paper/15 px-3 py-2 text-paper transition-colors hover:bg-paper hover:text-ink"
-                href={caseItem.href}
-                key={caseItem.label}
-              >
-                {caseItem.label}
-              </Link>
-            ))}
+            {cases.length > 0 ? (
+              cases.map((caseItem) => {
+                const CaseTypeIcon = caseTypeIcons[caseItem.type];
+
+                return (
+                  <Link
+                    className="flex items-center justify-between gap-3 border border-paper/15 px-3 py-2 text-paper transition-colors hover:bg-paper hover:text-ink"
+                    href={`/case/${caseItem.slug}`}
+                    key={caseItem.id}
+                  >
+                    <span className="truncate">{caseItem.title}</span>
+                    <CaseTypeIcon
+                      aria-label={caseItem.type}
+                      className="size-4 shrink-0 text-current/60"
+                    />
+                  </Link>
+                );
+              })
+            ) : (
+              <p className="border border-paper/15 px-3 py-2 text-paper/55">
+                No cases found.
+              </p>
+            )}
           </nav>
         </section>
       </aside>
