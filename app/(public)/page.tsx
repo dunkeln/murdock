@@ -25,8 +25,16 @@ export default function PublicHomePage() {
           </Button>
         </header>
 
-        <section className="flex flex-1 flex-col justify-center gap-10 py-16">
-          <div className="grid gap-8 border-b border-paper/15 pb-12 lg:grid-cols-[1fr_18rem] lg:items-end">
+        <section className="relative flex flex-1 flex-col justify-center gap-10 overflow-hidden py-16">
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 z-0 opacity-30 [background-image:linear-gradient(to_right,var(--color-paper)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-paper)_1px,transparent_1px)] [background-size:2rem_2rem]"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--color-ink)_70%)]"
+          />
+          <div className="relative z-10 grid gap-8 border-b border-paper/15 pb-12 lg:grid-cols-[1fr_18rem] lg:items-end">
             <h1 className="font-heading text-7xl uppercase leading-[0.84] tracking-tight text-paper sm:text-8xl lg:text-[10rem]">
               Legal work deserves fewer handoffs
             </h1>
@@ -36,7 +44,7 @@ export default function PublicHomePage() {
             </p>
           </div>
 
-          <div className="grid gap-6 text-sm text-paper/70 md:grid-cols-3">
+          <div className="relative z-10 grid gap-6 text-sm text-paper/70 md:grid-cols-3">
             <p>Built for attorney and paralegal workflows.</p>
             <p>Structured around review queues, matters, and documents.</p>
             <p>Scoped as a Glade forward-deployed engineering assessment.</p>
