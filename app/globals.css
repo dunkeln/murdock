@@ -133,6 +133,9 @@
     @apply bg-background text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply h-full overflow-hidden font-sans;
+  }
+  ::-webkit-scrollbar {
+    display: none;
   }
 }

@@ -86,3 +86,6 @@ next-env.d.ts
 /artifacts/
 /tmp/
 /temp/
+
+# local agent navigation notes
+/index.md

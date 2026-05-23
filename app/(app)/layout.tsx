@@ -9,7 +9,7 @@ export default function AppLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className="min-h-screen bg-ink text-paper">
+    <div className="flex h-screen flex-col overflow-hidden bg-ink text-paper">
       <header className="border-b border-paper/15">
         <div className="flex h-14 w-full items-center justify-between px-6 lg:px-8">
           <Link href="/" className="font-heading text-2xl uppercase leading-none">
@@ -20,7 +20,7 @@ export default function AppLayout({
           </nav>
         </div>
       </header>
-      <main>
+      <main className="min-h-0 flex-1 overflow-hidden">
         <AppFrame>{children}</AppFrame>
       </main>
     </div>

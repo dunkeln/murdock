@@ -44,7 +44,7 @@ export default function RootLayout({
         oswald.variable
       )}
     >
-      <body className="flex min-h-full flex-col">
+      <body className="flex h-full flex-col overflow-hidden">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
