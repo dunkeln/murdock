@@ -97,3 +97,33 @@ export async function getCaseSummaryByUserAndSlug(input: {
 
   return row ? toCaseSummaryDto(row) : null;
 }
+
+export async function updateCaseTitleByUser(input: {
+  userId: string;
+  caseId: string;
+  title: string;
+}): Promise<CaseSummaryDto | null> {
+  const sql = createNeonSql();
+  const rows = await sql`
+    update public.cases
+    set
+      title = ${input.title},
+      updated_at = now()
+    where user_id = ${input.userId}
+      and id = ${input.caseId}
+    returning
+      id,
+      slug,
+      title,
+      type,
+      client_name,
+      status,
+      priority,
+      next_action,
+      next_deadline_at,
+      updated_at
+  `;
+  const [row] = rows as CaseSummaryRow[];
+
+  return row ? toCaseSummaryDto(row) : null;
+}

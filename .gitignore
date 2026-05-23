@@ -89,6 +89,7 @@ next-env.d.ts
 /uploads/
 /exports/
 /artifacts/
+/examples/
 /tmp/
 /temp/
 

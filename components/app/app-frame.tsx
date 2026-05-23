@@ -10,10 +10,11 @@ import {
   Plane,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useDropzone } from "react-dropzone";
 
+import { updateCaseTitleAction } from "@/app/(app)/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { CaseSummaryDto, CaseType } from "@/lib/contracts/cases";
@@ -33,6 +34,138 @@ const caseTypeIcons = {
   immigration: Plane,
   general: FolderOpen,
 } satisfies Record<CaseType, React.ComponentType<{ className?: string }>>;
+
+type EditableCaseLinkProps = {
+  caseItem: CaseSummaryDto;
+};
+
+function EditableCaseLink({ caseItem }: EditableCaseLinkProps) {
+  const router = useRouter();
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [draftTitle, setDraftTitle] = React.useState(caseItem.title);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [isPending, startTransition] = React.useTransition();
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const navigationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const CaseTypeIcon = caseTypeIcons[caseItem.type];
+
+  React.useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  React.useEffect(() => {
+    return () => {
+      if (navigationTimerRef.current) {
+        clearTimeout(navigationTimerRef.current);
+      }
+    };
+  }, []);
+
+  function navigateToCase() {
+    navigationTimerRef.current = setTimeout(() => {
+      router.push(`/case/${caseItem.slug}`);
+      navigationTimerRef.current = null;
+    }, 180);
+  }
+
+  function beginEdit() {
+    if (navigationTimerRef.current) {
+      clearTimeout(navigationTimerRef.current);
+      navigationTimerRef.current = null;
+    }
+
+    setErrorMessage(null);
+    setDraftTitle(caseItem.title);
+    setIsEditing(true);
+  }
+
+  function cancelEdit() {
+    setDraftTitle(caseItem.title);
+    setErrorMessage(null);
+    setIsEditing(false);
+  }
+
+  function saveTitle() {
+    const trimmedTitle = draftTitle.trim();
+
+    if (trimmedTitle === caseItem.title) {
+      cancelEdit();
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("caseId", caseItem.id);
+    formData.set("title", trimmedTitle);
+
+    startTransition(async () => {
+      const result = await updateCaseTitleAction(formData);
+
+      if (!result.ok) {
+        setErrorMessage(result.message);
+        return;
+      }
+
+      setErrorMessage(null);
+      setDraftTitle(result.title);
+      setIsEditing(false);
+      router.refresh();
+    });
+  }
+
+  if (isEditing) {
+    return (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          saveTitle();
+        }}
+        className="flex items-center justify-between gap-3 border border-paper px-3 py-2 text-paper"
+      >
+        <input name="caseId" type="hidden" value={caseItem.id} />
+        <input
+          aria-invalid={Boolean(errorMessage)}
+          aria-label={`Edit ${caseItem.title} case name`}
+          className="min-w-0 flex-1 bg-transparent text-sm text-paper outline-none placeholder:text-paper/35"
+          disabled={isPending}
+          name="title"
+          onChange={(event) => setDraftTitle(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              cancelEdit();
+            }
+          }}
+          ref={inputRef}
+          value={draftTitle}
+        />
+        <CaseTypeIcon
+          aria-label={caseItem.type}
+          className="size-4 shrink-0 text-current/60"
+        />
+      </form>
+    );
+  }
+
+  return (
+    <button
+      className="flex items-center justify-between gap-3 border border-paper/15 px-3 py-2 text-left text-paper transition-colors hover:bg-paper hover:text-ink"
+      onClick={navigateToCase}
+      onDoubleClick={beginEdit}
+      type="button"
+    >
+      <span className="truncate">{caseItem.title}</span>
+      <CaseTypeIcon
+        aria-label={caseItem.type}
+        className="size-4 shrink-0 text-current/60"
+      />
+    </button>
+  );
+}
 
 export function AppFrame({ cases, children }: AppFrameProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
@@ -89,23 +222,9 @@ export function AppFrame({ cases, children }: AppFrameProps) {
             className="flex max-h-[calc(100vh-13rem)] flex-col gap-2 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {cases.length > 0 ? (
-              cases.map((caseItem) => {
-                const CaseTypeIcon = caseTypeIcons[caseItem.type];
-
-                return (
-                  <Link
-                    className="flex items-center justify-between gap-3 border border-paper/15 px-3 py-2 text-paper transition-colors hover:bg-paper hover:text-ink"
-                    href={`/case/${caseItem.slug}`}
-                    key={caseItem.id}
-                  >
-                    <span className="truncate">{caseItem.title}</span>
-                    <CaseTypeIcon
-                      aria-label={caseItem.type}
-                      className="size-4 shrink-0 text-current/60"
-                    />
-                  </Link>
-                );
-              })
+              cases.map((caseItem) => (
+                <EditableCaseLink caseItem={caseItem} key={caseItem.id} />
+              ))
             ) : (
               <p className="border border-paper/15 px-3 py-2 text-paper/55">
                 No cases found.
