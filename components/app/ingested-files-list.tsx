@@ -1,10 +1,11 @@
 "use client";
 
-import { Eye, FileText, Trash2 } from "lucide-react";
+import { AlertCircle, FileText, Trash2 } from "lucide-react";
 
 import type { IngestedFileItem } from "@/components/app/ingested-file-types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
 
 type IngestedFilesListProps = {
@@ -12,7 +13,7 @@ type IngestedFilesListProps = {
   files: IngestedFileItem[];
   onCheckedFileIdsChange: (fileIds: string[]) => void;
   onDeleteFile: (fileId: string) => void;
-  onSelectFile: (fileId: string) => void;
+  onSelectFile: (fileId: string | null) => void;
   selectedFileId: string | null;
 };
 
@@ -29,10 +30,7 @@ export function IngestedFilesList({
   }
 
   return (
-    <section className="flex w-full max-w-md justify-self-end flex-col gap-2 text-sm text-paper/70">
-      <p className="text-xs font-medium uppercase tracking-wide text-paper/45">
-        Ingested files
-      </p>
+    <section className="flex w-full max-w-md justify-self-end flex-col text-sm text-paper/70">
       <ol className="flex max-h-[13.5rem] flex-col gap-2 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {files.map((item) => {
           const isSelected = selectedFileId === item.id;
@@ -42,7 +40,7 @@ export function IngestedFilesList({
             <li key={item.id}>
               <div
                 className={cn(
-                  "flex h-9 items-center gap-2 border border-paper/15 px-2 text-paper transition-colors hover:bg-paper/10",
+                  "grid h-9 grid-cols-[1rem_minmax(0,1fr)_1.5rem] items-center gap-3 border border-paper/15 px-3 text-paper transition-colors hover:bg-paper/10",
                   isSelected && "border-paper bg-paper text-ink hover:bg-paper"
                 )}
               >
@@ -58,38 +56,29 @@ export function IngestedFilesList({
                     );
                   }}
                 />
-                <Button
-                  aria-pressed={isSelected}
+                <Toggle
+                  aria-label={`Show ${item.file.name}`}
                   className={cn(
-                    "min-w-0 flex-1 justify-start overflow-hidden rounded-none border-0 bg-transparent px-1 text-paper hover:!bg-transparent hover:!text-paper",
+                    "h-auto max-w-full min-w-0 justify-start gap-2 overflow-hidden rounded-none border-0 bg-transparent p-0 text-paper hover:!bg-transparent hover:!text-paper aria-pressed:!bg-transparent has-data-[icon=inline-start]:pl-0",
                     isSelected && "text-ink hover:!bg-transparent hover:!text-ink"
                   )}
-                  onClick={() => onSelectFile(item.id)}
-                  type="button"
-                  variant="ghost"
+                  onPressedChange={(pressed) => {
+                    onSelectFile(pressed ? item.id : null);
+                  }}
+                  pressed={isSelected}
                 >
-                  <FileText data-icon="inline-start" />
+                  {item.ocrStatus === "failed" ? (
+                    <AlertCircle data-icon="inline-start" />
+                  ) : (
+                    <FileText data-icon="inline-start" />
+                  )}
                   <span className="truncate">{item.file.name}</span>
-                </Button>
-                <div className="flex items-center gap-1">
-                  <Button
-                    aria-label={`View ${item.file.name}`}
-                    className={cn(
-                      "rounded-none border-0 bg-transparent text-paper hover:!bg-transparent hover:!text-paper",
-                      isSelected &&
-                        "text-ink hover:!bg-transparent hover:!text-ink"
-                    )}
-                    onClick={() => onSelectFile(item.id)}
-                    size="icon-xs"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Eye data-icon="inline-start" />
-                  </Button>
+                </Toggle>
+                <div className="flex size-6 items-center justify-end overflow-hidden">
                   <Button
                     aria-label={`Delete ${item.file.name}`}
                     className={cn(
-                      "rounded-none border-0 bg-transparent text-paper hover:!bg-transparent hover:!text-paper",
+                      "size-6 rounded-none border-0 bg-transparent p-0 text-paper hover:!bg-transparent hover:!text-paper",
                       isSelected &&
                         "text-ink hover:!bg-transparent hover:!text-ink"
                     )}

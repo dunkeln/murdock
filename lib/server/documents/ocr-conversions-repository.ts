@@ -84,12 +84,12 @@ export async function getActiveOcrConversion(input: {
   return row ? toOcrConversionDto(row) : null;
 }
 
-export async function upsertProcessingOcrConversion(input: {
+export async function insertProcessingOcrConversion(input: {
   documentSha256: string;
   firmId: string;
   provider: "mistral";
   providerModel: string;
-}): Promise<OcrConversionDto> {
+}): Promise<OcrConversionDto | null> {
   const sql = createNeonSql();
   const rows = await sql`
     insert into public.ocr_conversions (
@@ -121,13 +121,7 @@ export async function upsertProcessingOcrConversion(input: {
       provider_model
     )
     where deleted_at is null
-    do update set
-      status = 'processing',
-      markdown = null,
-      pages_processed = null,
-      error_message = null,
-      expires_at = now() + interval '2 days',
-      updated_at = now()
+    do nothing
     returning
       id,
       firm_id,
@@ -145,7 +139,53 @@ export async function upsertProcessingOcrConversion(input: {
   `;
   const [row] = rows as OcrConversionRow[];
 
-  return toOcrConversionDto(row);
+  return row ? toOcrConversionDto(row) : null;
+}
+
+export async function claimRefreshableOcrConversion(input: {
+  documentSha256: string;
+  firmId: string;
+  provider: "mistral";
+  providerModel: string;
+}): Promise<OcrConversionDto | null> {
+  const sql = createNeonSql();
+  const rows = await sql`
+    update public.ocr_conversions
+    set
+      status = 'processing',
+      markdown = null,
+      pages_processed = null,
+      error_message = null,
+      expires_at = now() + interval '2 days',
+      updated_at = now()
+    where firm_id = ${input.firmId}
+      and document_sha256 = ${input.documentSha256}
+      and provider = ${input.provider}
+      and provider_model = ${input.providerModel}
+      and deleted_at is null
+      and (
+        status = 'pending'
+        or (status = 'ready' and markdown is null)
+        or expires_at <= now()
+      )
+    returning
+      id,
+      firm_id,
+      document_sha256,
+      provider,
+      provider_model,
+      status,
+      markdown,
+      pages_processed,
+      error_message,
+      expires_at,
+      deleted_at,
+      created_at,
+      updated_at
+  `;
+  const [row] = rows as OcrConversionRow[];
+
+  return row ? toOcrConversionDto(row) : null;
 }
 
 export async function markOcrConversionReady(input: {
@@ -197,7 +237,7 @@ export async function markOcrConversionFailed(input: {
       markdown = null,
       pages_processed = null,
       error_message = ${input.errorMessage},
-      expires_at = now() + interval '2 days',
+      expires_at = now() + interval '5 seconds',
       updated_at = now()
     where id = ${input.conversionId}
       and deleted_at is null

@@ -99,6 +99,7 @@ next-env.d.ts
 
 # local agent navigation notes
 /index.md
+/interview notes.markdown
 
 # local agent state and memories
 /.codex/memories/

@@ -13,7 +13,10 @@ import type { DropEvent } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 
-import { updateCaseTitleAction } from "@/app/(app)/actions";
+import {
+  ingestDocumentOcrAction,
+  updateCaseTitleAction,
+} from "@/app/(app)/actions";
 import type { IngestedFileItem } from "@/components/app/ingested-file-types";
 import { IngestedFilesList } from "@/components/app/ingested-files-list";
 import { PdfViewer } from "@/components/app/pdf-viewer";
@@ -54,11 +57,7 @@ const caseTypeIcons = {
   general: FolderOpen,
 } satisfies Record<CaseType, React.ComponentType<{ className?: string }>>;
 
-const OCR_READY_TOAST_DELAY_MS = 1400;
-
-function getFileToastDescription(files: File[]) {
-  return files.length === 1 ? files[0].name : `${files.length} documents`;
-}
+const MAX_CONCURRENT_OCR_UPLOADS = 3;
 
 type EditableCaseLinkProps = {
   caseItem: CaseSummaryDto;
@@ -201,56 +200,156 @@ export function AppFrame({ cases, children }: AppFrameProps) {
     null
   );
   const [checkedFileIds, setCheckedFileIds] = React.useState<string[]>([]);
-  const ocrToastTimersRef = React.useRef(
-    new Set<ReturnType<typeof setTimeout>>()
-  );
   const selectedFile = React.useMemo(
     () =>
       ingestedFiles.find((item) => item.id === selectedFileId)?.file ?? null,
     [ingestedFiles, selectedFileId]
   );
 
-  React.useEffect(() => {
-    const ocrToastTimers = ocrToastTimersRef.current;
+  const updateIngestedFile = React.useCallback(
+    (fileId: string, patch: Partial<IngestedFileItem>) => {
+      setIngestedFiles((currentFiles) =>
+        currentFiles.map((currentFile) =>
+          currentFile.id === fileId
+            ? {
+                ...currentFile,
+                ...patch,
+              }
+            : currentFile
+        )
+      );
+    },
+    []
+  );
 
-    return () => {
-      ocrToastTimers.forEach((timer) => clearTimeout(timer));
-      ocrToastTimers.clear();
-    };
-  }, []);
+  const processDroppedFile = React.useCallback(
+    async (item: IngestedFileItem) => {
+      const toastId = `ocr-${item.id}`;
 
-  const onDrop = React.useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) {
-      return;
-    }
-
-    const acceptedFileItems = acceptedFiles.map((file) => ({
-      file,
-      id: crypto.randomUUID(),
-    }));
-
-    setIngestedFiles((currentFiles) => [
-      ...acceptedFileItems,
-      ...currentFiles,
-    ]);
-    const toastId = `ocr-${crypto.randomUUID()}`;
-    const description = getFileToastDescription(acceptedFiles);
-
-    toast.loading("OCR processing", {
-      description,
-      id: toastId,
-    });
-
-    const timer = setTimeout(() => {
-      toast.success("OCR ready", {
-        description,
+      toast.loading("OCR processing", {
+        description: item.file.name,
         id: toastId,
       });
-      ocrToastTimersRef.current.delete(timer);
-    }, OCR_READY_TOAST_DELAY_MS);
 
-    ocrToastTimersRef.current.add(timer);
-  }, []);
+      const formData = new FormData();
+      formData.set("file", item.file);
+
+      const result = await ingestDocumentOcrAction(formData);
+
+      if (!result.ok) {
+        updateIngestedFile(item.id, {
+          errorMessage: result.message,
+          ocrStatus: "failed",
+        });
+        toast.error("OCR failed", {
+          description: result.message,
+          id: toastId,
+        });
+        return;
+      }
+
+      let ocrStatus: IngestedFileItem["ocrStatus"] = "processing";
+
+      if (result.status === "failed") {
+        ocrStatus = "failed";
+      } else if (result.cached) {
+        ocrStatus = "cached";
+      } else if (result.status === "ready") {
+        ocrStatus = "ready";
+      }
+
+      if (ocrStatus === "failed") {
+        updateIngestedFile(item.id, {
+          errorMessage: result.errorMessage ?? "OCR failed.",
+          expiresAt: result.expiresAt,
+          ocrConversionId: result.conversionId,
+          ocrStatus,
+          pagesProcessed: result.pagesProcessed,
+        });
+        toast.error("OCR failed", {
+          description: result.errorMessage ?? item.file.name,
+          id: toastId,
+        });
+        return;
+      }
+
+      updateIngestedFile(item.id, {
+        errorMessage: result.errorMessage ?? undefined,
+        expiresAt: result.expiresAt,
+        ocrConversionId: result.conversionId,
+        ocrStatus,
+        pagesProcessed: result.pagesProcessed,
+      });
+
+      if (ocrStatus === "cached") {
+        toast.success("OCR cache reused", {
+          description: item.file.name,
+          id: toastId,
+        });
+        return;
+      }
+
+      if (ocrStatus === "ready") {
+        toast.success("OCR ready", {
+          description: item.file.name,
+          id: toastId,
+        });
+        return;
+      }
+
+      toast.loading("OCR already processing", {
+        description: item.file.name,
+        id: toastId,
+      });
+    },
+    [updateIngestedFile]
+  );
+
+  const processDroppedFiles = React.useCallback(
+    async (fileItems: IngestedFileItem[]) => {
+      const pendingFileItems = [...fileItems];
+      const workers = Array.from(
+        {
+          length: Math.min(MAX_CONCURRENT_OCR_UPLOADS, pendingFileItems.length),
+        },
+        async () => {
+          let item = pendingFileItems.shift();
+
+          while (item) {
+            await processDroppedFile(item);
+            item = pendingFileItems.shift();
+          }
+        }
+      );
+
+      await Promise.all(workers);
+    },
+    [processDroppedFile]
+  );
+
+  const onDrop = React.useCallback(
+    (acceptedFiles: File[]) => {
+      if (acceptedFiles.length === 0) {
+        return;
+      }
+
+      const acceptedFileItems = acceptedFiles.map((file) => ({
+        file,
+        id: crypto.randomUUID(),
+        ocrStatus: "processing" as const,
+      }));
+
+      setIngestedFiles((currentFiles) => [
+        ...acceptedFileItems,
+        ...currentFiles,
+      ]);
+      setSelectedFileId(
+        (currentFileId) => currentFileId ?? acceptedFileItems[0].id
+      );
+      void processDroppedFiles(acceptedFileItems);
+    },
+    [processDroppedFiles]
+  );
   const { getInputProps, getRootProps, isDragActive } = useDropzone({
     getFilesFromEvent: getDroppedFilesFromEvent,
     noClick: true,
