@@ -1,4 +1,5 @@
 export {
+  MISTRAL_OCR_MODEL,
   ocrDocumentUrl,
   uploadAndOcrDocument,
   uploadDocumentForOcr,

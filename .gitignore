@@ -67,6 +67,10 @@ next-env.d.ts
 
 # local databases and large binary artifacts
 /db/
+!/db/
+/db/*
+!/db/migrations/
+!/db/migrations/*.sql
 /database/
 /data/
 /storage/

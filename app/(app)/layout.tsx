@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { AppFrame } from "@/components/app/app-frame";
 import { ModeSwitcher } from "@/components/app/mode-switcher";
+import { Toaster } from "@/components/ui/sonner";
 import { listCurrentUserCaseSummaries } from "@/lib/server/cases/service";
 
 export default async function AppLayout({
@@ -29,6 +30,7 @@ export default async function AppLayout({
       <main className="min-h-0 flex-1 overflow-hidden">
         <AppFrame cases={cases}>{children}</AppFrame>
       </main>
+      <Toaster position="bottom-right" />
     </div>
   );
 }

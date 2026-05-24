@@ -16,7 +16,7 @@ import {
 } from "@/lib/contracts/document-ingestion";
 import { createMistralClient } from "@/lib/server/adapters/mistral/client";
 
-const MISTRAL_OCR_MODEL = "mistral-ocr-latest";
+export const MISTRAL_OCR_MODEL = "mistral-ocr-latest";
 
 function toIngestionError(error: unknown): DocumentIngestionError {
   const message = error instanceof Error ? error.message : "Unexpected Mistral adapter failure.";

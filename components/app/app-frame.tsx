@@ -1,27 +1,46 @@
 "use client";
 
 import {
-  Eye,
-  FileText,
   FolderOpen,
   Landmark,
   PanelLeftClose,
   PanelLeftOpen,
   Plane,
-  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
+import type { DropEvent } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
+import { toast } from "sonner";
 
 import { updateCaseTitleAction } from "@/app/(app)/actions";
+import type { IngestedFileItem } from "@/components/app/ingested-file-types";
+import { IngestedFilesList } from "@/components/app/ingested-files-list";
+import { PdfViewer } from "@/components/app/pdf-viewer";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import type { CaseSummaryDto, CaseType } from "@/lib/contracts/cases";
 import { cn } from "@/lib/utils";
 
-function getFileKey(file: File) {
-  return `${file.name}-${file.lastModified}`;
+async function getDroppedFilesFromEvent(
+  event: DropEvent
+): Promise<Array<File | DataTransferItem>> {
+  if (Array.isArray(event)) {
+    return [];
+  }
+
+  if ("dataTransfer" in event && event.dataTransfer) {
+    return Array.from(event.dataTransfer.files);
+  }
+
+  if (
+    "target" in event &&
+    event.target instanceof HTMLInputElement &&
+    event.target.files instanceof FileList
+  ) {
+    return Array.from(event.target.files);
+  }
+
+  return [];
 }
 
 type AppFrameProps = {
@@ -34,6 +53,12 @@ const caseTypeIcons = {
   immigration: Plane,
   general: FolderOpen,
 } satisfies Record<CaseType, React.ComponentType<{ className?: string }>>;
+
+const OCR_READY_TOAST_DELAY_MS = 1400;
+
+function getFileToastDescription(files: File[]) {
+  return files.length === 1 ? files[0].name : `${files.length} documents`;
+}
 
 type EditableCaseLinkProps = {
   caseItem: CaseSummaryDto;
@@ -169,19 +194,65 @@ function EditableCaseLink({ caseItem }: EditableCaseLinkProps) {
 
 export function AppFrame({ cases, children }: AppFrameProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
-  const [ingestedFiles, setIngestedFiles] = React.useState<File[]>([]);
-  const [selectedFileKey, setSelectedFileKey] = React.useState<string | null>(
+  const [ingestedFiles, setIngestedFiles] = React.useState<IngestedFileItem[]>(
+    []
+  );
+  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(
     null
   );
-  const [checkedFileKeys, setCheckedFileKeys] = React.useState<string[]>([]);
+  const [checkedFileIds, setCheckedFileIds] = React.useState<string[]>([]);
+  const ocrToastTimersRef = React.useRef(
+    new Set<ReturnType<typeof setTimeout>>()
+  );
+  const selectedFile = React.useMemo(
+    () =>
+      ingestedFiles.find((item) => item.id === selectedFileId)?.file ?? null,
+    [ingestedFiles, selectedFileId]
+  );
+
+  React.useEffect(() => {
+    const ocrToastTimers = ocrToastTimersRef.current;
+
+    return () => {
+      ocrToastTimers.forEach((timer) => clearTimeout(timer));
+      ocrToastTimers.clear();
+    };
+  }, []);
+
   const onDrop = React.useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) {
       return;
     }
 
-    setIngestedFiles((currentFiles) => [...acceptedFiles, ...currentFiles]);
+    const acceptedFileItems = acceptedFiles.map((file) => ({
+      file,
+      id: crypto.randomUUID(),
+    }));
+
+    setIngestedFiles((currentFiles) => [
+      ...acceptedFileItems,
+      ...currentFiles,
+    ]);
+    const toastId = `ocr-${crypto.randomUUID()}`;
+    const description = getFileToastDescription(acceptedFiles);
+
+    toast.loading("OCR processing", {
+      description,
+      id: toastId,
+    });
+
+    const timer = setTimeout(() => {
+      toast.success("OCR ready", {
+        description,
+        id: toastId,
+      });
+      ocrToastTimersRef.current.delete(timer);
+    }, OCR_READY_TOAST_DELAY_MS);
+
+    ocrToastTimersRef.current.add(timer);
   }, []);
   const { getInputProps, getRootProps, isDragActive } = useDropzone({
+    getFilesFromEvent: getDroppedFilesFromEvent,
     noClick: true,
     onDrop,
   });
@@ -256,105 +327,37 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-6 px-8 py-8">
-          {children}
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 overflow-hidden px-8 py-8">
+          <div className="grid min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]">
+            <div className="min-w-0">{children}</div>
+            <IngestedFilesList
+              checkedFileIds={checkedFileIds}
+              files={ingestedFiles}
+              onCheckedFileIdsChange={setCheckedFileIds}
+              onDeleteFile={(fileId) => {
+                const deletedFile = ingestedFiles.find(
+                  (item) => item.id === fileId
+                )?.file;
 
-          {ingestedFiles.length > 0 ? (
-            <section className="flex w-full max-w-xl flex-col gap-2 text-sm text-paper/70">
-              <p className="text-xs font-medium uppercase tracking-wide text-paper/45">
-                Ingested files
-              </p>
-              <ol className="flex max-h-[13.5rem] flex-col gap-2 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {ingestedFiles.map((file) => {
-                  const fileKey = getFileKey(file);
-                  const isSelected = selectedFileKey === fileKey;
-                  const isChecked = checkedFileKeys.includes(fileKey);
+                setIngestedFiles((currentFiles) =>
+                  currentFiles.filter((currentFile) => currentFile.id !== fileId)
+                );
+                setCheckedFileIds((currentIds) =>
+                  currentIds.filter((id) => id !== fileId)
+                );
+                setSelectedFileId((currentId) =>
+                  currentId === fileId ? null : currentId
+                );
+                toast("File removed", {
+                  description: deletedFile?.name,
+                });
+              }}
+              onSelectFile={setSelectedFileId}
+              selectedFileId={selectedFileId}
+            />
+          </div>
 
-                  return (
-                    <li key={fileKey}>
-                      <div
-                        className={cn(
-                          "flex h-9 items-center gap-2 border border-paper/15 px-2 text-paper transition-colors hover:bg-paper/10",
-                          isSelected &&
-                            "border-paper bg-paper text-ink hover:bg-paper"
-                        )}
-                      >
-                        <Checkbox
-                          aria-label={`Select ${file.name}`}
-                          checked={isChecked}
-                          className="rounded-none border-transparent bg-transparent text-current data-checked:border-transparent data-checked:bg-transparent data-checked:text-current"
-                          onCheckedChange={(checked) => {
-                            setCheckedFileKeys((currentKeys) =>
-                              checked
-                                ? [...currentKeys, fileKey]
-                                : currentKeys.filter((key) => key !== fileKey)
-                            );
-                          }}
-                        />
-                        <Button
-                          aria-pressed={isSelected}
-                          className={cn(
-                            "min-w-0 flex-1 justify-start overflow-hidden rounded-none border-0 bg-transparent px-1 text-paper hover:!bg-transparent hover:!text-paper",
-                            isSelected &&
-                              "text-ink hover:!bg-transparent hover:!text-ink"
-                          )}
-                          onClick={() => setSelectedFileKey(fileKey)}
-                          type="button"
-                          variant="ghost"
-                        >
-                          <FileText data-icon="inline-start" />
-                          <span className="truncate">{file.name}</span>
-                        </Button>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            aria-label={`View ${file.name}`}
-                            className={cn(
-                              "rounded-none border-0 bg-transparent text-paper hover:!bg-transparent hover:!text-paper",
-                              isSelected &&
-                                "text-ink hover:!bg-transparent hover:!text-ink"
-                            )}
-                            onClick={() => setSelectedFileKey(fileKey)}
-                            size="icon-xs"
-                            type="button"
-                            variant="ghost"
-                          >
-                            <Eye data-icon="inline-start" />
-                          </Button>
-                          <Button
-                            aria-label={`Delete ${file.name}`}
-                            className={cn(
-                              "rounded-none border-0 bg-transparent text-paper hover:!bg-transparent hover:!text-paper",
-                              isSelected &&
-                                "text-ink hover:!bg-transparent hover:!text-ink"
-                            )}
-                            onClick={() => {
-                              setIngestedFiles((currentFiles) =>
-                                currentFiles.filter(
-                                  (currentFile) =>
-                                    getFileKey(currentFile) !== fileKey
-                                )
-                              );
-                              setCheckedFileKeys((currentKeys) =>
-                                currentKeys.filter((key) => key !== fileKey)
-                              );
-                              setSelectedFileKey((currentKey) =>
-                                currentKey === fileKey ? null : currentKey
-                              );
-                            }}
-                            size="icon-xs"
-                            type="button"
-                            variant="ghost"
-                          >
-                            <Trash2 data-icon="inline-start" />
-                          </Button>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            </section>
-          ) : null}
+          <PdfViewer file={selectedFile} />
         </div>
       </div>
     </div>
