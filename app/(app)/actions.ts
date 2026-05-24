@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { updateCurrentUserCaseTitle } from "@/lib/server/cases/service";
 import { ensureCurrentFirmMistralOcrConversion } from "@/lib/server/documents/ocr-conversions-service";
+import { withLangfuseObservation } from "@/lib/server/telemetry/langfuse";
 
 const updateCaseTitleActionInputSchema = z.object({
   caseId: z.uuid(),
@@ -47,77 +48,102 @@ function getOcrUploadFile(formData: FormData): File | null {
 export async function updateCaseTitleAction(
   formData: FormData
 ): Promise<UpdateCaseTitleActionResult> {
-  const parsedInput = updateCaseTitleActionInputSchema.safeParse({
-    caseId: formData.get("caseId"),
-    title: formData.get("title"),
-  });
+  return withLangfuseObservation(
+    {
+      name: "server-action.update-case-title",
+      input: {
+        caseId: formData.get("caseId"),
+      },
+      output: (result) => ({
+        ok: result.ok,
+      }),
+    },
+    async () => {
+      const parsedInput = updateCaseTitleActionInputSchema.safeParse({
+        caseId: formData.get("caseId"),
+        title: formData.get("title"),
+      });
 
-  if (!parsedInput.success) {
-    return {
-      ok: false,
-      message: "Case names must be 1-120 characters.",
-    };
-  }
+      if (!parsedInput.success) {
+        return {
+          ok: false,
+          message: "Case names must be 1-120 characters.",
+        };
+      }
 
-  const updatedCase = await updateCurrentUserCaseTitle(parsedInput.data);
+      const updatedCase = await updateCurrentUserCaseTitle(parsedInput.data);
 
-  if (!updatedCase) {
-    return {
-      ok: false,
-      message: "Case not found.",
-    };
-  }
+      if (!updatedCase) {
+        return {
+          ok: false,
+          message: "Case not found.",
+        };
+      }
 
-  revalidatePath("/dashboard");
-  revalidatePath(`/case/${updatedCase.slug}`);
+      revalidatePath("/dashboard");
+      revalidatePath(`/case/${updatedCase.slug}`);
 
-  return {
-    ok: true,
-    title: updatedCase.title,
-  };
+      return {
+        ok: true,
+        title: updatedCase.title,
+      };
+    }
+  );
 }
 
 export async function ingestDocumentOcrAction(
   formData: FormData
 ): Promise<IngestDocumentOcrActionResult> {
-  const file = getOcrUploadFile(formData);
+  return withLangfuseObservation(
+    {
+      name: "server-action.ingest-document-ocr",
+      output: (result) => ({
+        ok: result.ok,
+        status: result.ok ? result.status : null,
+        cached: result.ok ? result.cached : null,
+      }),
+    },
+    async () => {
+      const file = getOcrUploadFile(formData);
 
-  if (!file || file.size === 0) {
-    return {
-      ok: false,
-      message: "Upload a non-empty document.",
-    };
-  }
+      if (!file || file.size === 0) {
+        return {
+          ok: false,
+          message: "Upload a non-empty document.",
+        };
+      }
 
-  if (file.size > MAX_OCR_UPLOAD_BYTES) {
-    return {
-      ok: false,
-      message: "Documents must be 10 MB or smaller for this upload path.",
-    };
-  }
+      if (file.size > MAX_OCR_UPLOAD_BYTES) {
+        return {
+          ok: false,
+          message: "Documents must be 10 MB or smaller for this upload path.",
+        };
+      }
 
-  try {
-    const result = await ensureCurrentFirmMistralOcrConversion({
-      fileName: file.name,
-      content: file,
-    });
+      try {
+        const result = await ensureCurrentFirmMistralOcrConversion({
+          fileName: file.name,
+          content: file,
+        });
 
-    return {
-      ok: true,
-      cached: result.source === "cache",
-      conversionId: result.conversion.id,
-      errorMessage: result.conversion.errorMessage,
-      expiresAt: result.conversion.expiresAt,
-      pagesProcessed: result.conversion.pagesProcessed,
-      status: result.conversion.status,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "OCR ingestion failed unexpectedly.",
-    };
-  }
+        return {
+          ok: true,
+          cached: result.source === "cache",
+          conversionId: result.conversion.id,
+          errorMessage: result.conversion.errorMessage,
+          expiresAt: result.conversion.expiresAt,
+          pagesProcessed: result.conversion.pagesProcessed,
+          status: result.conversion.status,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "OCR ingestion failed unexpectedly.",
+        };
+      }
+    }
+  );
 }

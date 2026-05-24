@@ -426,9 +426,22 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           </div>
         ) : null}
 
-        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 overflow-hidden px-8 py-8">
-          <div className="grid min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]">
-            <div className="min-w-0">{children}</div>
+        <div
+          className={cn(
+            "grid h-full min-h-0 gap-6 overflow-hidden px-8 py-8",
+            selectedFile
+              ? "grid-rows-[auto_minmax(0,1fr)]"
+              : "grid-rows-[minmax(0,1fr)]"
+          )}
+        >
+          <div
+            className={cn(
+              "grid h-full min-h-0 grid-cols-1 gap-6",
+              ingestedFiles.length > 0 &&
+                "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]"
+            )}
+          >
+            <div className="min-h-0 min-w-0">{children}</div>
             <IngestedFilesList
               checkedFileIds={checkedFileIds}
               files={ingestedFiles}
