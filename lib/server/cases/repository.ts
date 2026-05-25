@@ -3,7 +3,6 @@ import "server-only";
 import {
   type CreateCaseInput,
   type CasePriority,
-  type CaseStatus,
   type CaseSummaryDto,
   type CaseType,
   createCaseInputSchema,
@@ -17,7 +16,6 @@ type CaseSummaryRow = {
   title: string;
   type: CaseType;
   client_name: string | null;
-  status: CaseStatus;
   priority: CasePriority;
   next_action: string | null;
   next_deadline_at: Date | string | null;
@@ -39,7 +37,6 @@ function toCaseSummaryDto(row: CaseSummaryRow): CaseSummaryDto {
     title: row.title,
     type: row.type,
     clientName: row.client_name,
-    status: row.status,
     priority: row.priority,
     nextAction: row.next_action,
     nextDeadlineAt: toIsoDateTime(row.next_deadline_at),
@@ -74,7 +71,6 @@ export async function createCaseByUser(input: {
       title,
       type,
       client_name,
-      status,
       priority
     )
     values (
@@ -83,7 +79,6 @@ export async function createCaseByUser(input: {
       ${parsedData.title},
       ${parsedData.type},
       ${parsedData.clientName},
-      ${parsedData.status},
       ${parsedData.priority}
     )
     returning
@@ -92,7 +87,6 @@ export async function createCaseByUser(input: {
       title,
       type,
       client_name,
-      status,
       priority,
       next_action,
       next_deadline_at,
@@ -115,7 +109,6 @@ export async function listCaseSummariesByUser(input: {
       title,
       type,
       client_name,
-      status,
       priority,
       next_action,
       next_deadline_at,
@@ -141,7 +134,6 @@ export async function getCaseSummaryByUserAndSlug(input: {
       title,
       type,
       client_name,
-      status,
       priority,
       next_action,
       next_deadline_at,
@@ -168,7 +160,6 @@ export async function getCaseSummaryByUserAndId(input: {
       title,
       type,
       client_name,
-      status,
       priority,
       next_action,
       next_deadline_at,
@@ -198,7 +189,6 @@ export async function deleteCaseByUser(input: {
       title,
       type,
       client_name,
-      status,
       priority,
       next_action,
       next_deadline_at,
@@ -228,7 +218,6 @@ export async function updateCaseTitleByUser(input: {
       title,
       type,
       client_name,
-      status,
       priority,
       next_action,
       next_deadline_at,

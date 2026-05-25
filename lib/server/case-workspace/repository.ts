@@ -31,6 +31,7 @@ export type CaseWorkspaceRecords = {
 };
 
 export type UpsertSourceDocumentInput = {
+  caseDocumentId: string | null;
   caseId: string;
   documentSha256: string | null;
   fileName: string;
@@ -97,6 +98,74 @@ export type UpsertIssueInput = {
   title: string;
 };
 
+function isMissingCaseDocumentsTable(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  return (
+    message.includes("relation") &&
+    message.includes("public.case_documents") &&
+    message.includes("does not exist")
+  );
+}
+
+async function getSourceDocumentRows(
+  sql: ReturnType<typeof createNeonSql>,
+  caseId: string,
+) {
+  try {
+    return await sql`
+      select
+        csd.id,
+        csd.case_id,
+        csd.source_key,
+        csd.title,
+        csd.file_name,
+        csd.source_kind,
+        csd.case_document_id,
+        csd.ocr_conversion_id,
+        csd.document_sha256,
+        cd.mime_type,
+        cd.size_bytes,
+        csd.ocr_status,
+        csd.source_date,
+        csd.received_at,
+        csd.created_at,
+        csd.updated_at
+      from public.case_source_documents csd
+      left join public.case_documents cd on cd.id = csd.case_document_id
+      where csd.case_id = ${caseId}
+      order by coalesce(csd.source_date, csd.received_at, csd.created_at) asc, csd.id asc
+    `;
+  } catch (error) {
+    if (!isMissingCaseDocumentsTable(error)) {
+      throw error;
+    }
+
+    return sql`
+      select
+        csd.id,
+        csd.case_id,
+        csd.source_key,
+        csd.title,
+        csd.file_name,
+        csd.source_kind,
+        csd.case_document_id,
+        csd.ocr_conversion_id,
+        csd.document_sha256,
+        null::text as mime_type,
+        null::integer as size_bytes,
+        csd.ocr_status,
+        csd.source_date,
+        csd.received_at,
+        csd.created_at,
+        csd.updated_at
+      from public.case_source_documents csd
+      where csd.case_id = ${caseId}
+      order by coalesce(csd.source_date, csd.received_at, csd.created_at) asc, csd.id asc
+    `;
+  }
+}
+
 export async function getCaseWorkspaceRecordsByCaseId(input: {
   caseId: string;
 }): Promise<CaseWorkspaceRecords> {
@@ -109,26 +178,7 @@ export async function getCaseWorkspaceRecordsByCaseId(input: {
     chronologyEventRows,
     issueRows,
   ] = await Promise.all([
-    sql`
-      select
-        id,
-        case_id,
-        source_key,
-        title,
-        file_name,
-        source_kind,
-        case_document_id,
-        ocr_conversion_id,
-        document_sha256,
-        ocr_status,
-        source_date,
-        received_at,
-        created_at,
-        updated_at
-      from public.case_source_documents
-      where case_id = ${input.caseId}
-      order by coalesce(source_date, received_at, created_at) asc, id asc
-    `,
+    getSourceDocumentRows(sql, input.caseId),
     sql`
       select
         id,
@@ -249,6 +299,7 @@ export async function upsertCaseWorkspaceSourceDocuments(
           title,
           file_name,
           source_kind,
+          case_document_id,
           ocr_conversion_id,
           document_sha256,
           ocr_status,
@@ -261,6 +312,7 @@ export async function upsertCaseWorkspaceSourceDocuments(
           ${document.title},
           ${document.fileName},
           ${document.sourceKind},
+          ${document.caseDocumentId},
           ${document.ocrConversionId},
           ${document.documentSha256},
           ${document.ocrStatus},
@@ -272,6 +324,7 @@ export async function upsertCaseWorkspaceSourceDocuments(
           title = excluded.title,
           file_name = excluded.file_name,
           source_kind = excluded.source_kind,
+          case_document_id = excluded.case_document_id,
           ocr_conversion_id = excluded.ocr_conversion_id,
           document_sha256 = excluded.document_sha256,
           ocr_status = excluded.ocr_status,
@@ -288,6 +341,8 @@ export async function upsertCaseWorkspaceSourceDocuments(
           case_document_id,
           ocr_conversion_id,
           document_sha256,
+          null as mime_type,
+          null as size_bytes,
           ocr_status,
           source_date,
           received_at,

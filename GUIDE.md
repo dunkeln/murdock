@@ -40,9 +40,12 @@ ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=
 OPENAI_API_KEY=
 OPENAI_MODEL=
+HARNESS_MAX_SEGMENT_CALLS=2
+HARNESS_MAX_SOURCE_CALLS=2
 ```
 
 Model keys are used behind `lib/server/ai/`. Harness extraction and workflow code should call the shared AI boundary instead of importing provider SDKs directly.
+Harness concurrency variables are optional deployment tuning controls. Increase them only when provider rate limits and database capacity can absorb more concurrent extraction work.
 
 Do not print secrets in logs or client components.
 
@@ -96,6 +99,75 @@ Avoid these cognitive-load traps:
   validation behavior is made explicit in `lib/server/ai/`.
 - Do not solve architectural constraints with prompt wording alone. Use schemas,
   typed intermediates, validation, retries, and review gates.
+
+## UX Provenance Regression Rubric
+
+Use this rubric before and after meaningful case-workspace UI changes. Score
+each dimension from 0 to 2:
+
+- `0`: absent, misleading, or harmful.
+- `1`: present but partial, easy to miss, or weakly connected to the workflow.
+- `2`: clear, reliable, and naturally supports legal review.
+
+Flag any `0` as a finding before visual polish. Track `1` scores as regression
+risks if a change makes provenance, review gates, or source state harder to
+inspect.
+
+| Dimension | What to check |
+| --- | --- |
+| Orientation | Matter identity, status, and current workflow state are visible. |
+| Next action | The primary review action or gate is explicit and reachable. |
+| Provenance visibility | Source document, page/span, quote, and source status are easy to inspect. |
+| Gate clarity | Blocking vs nonblocking state is clear, including role or owner when available. |
+| Source quality | OCR quality, missing pages, assumptions, confidence, and limitations surface when relevant. |
+| Reversibility | Risky actions have clear outcomes, recovery paths, or review states. |
+| Accessibility and language | Labels, focus, contrast, headings, copy, and wrapping support fast scanning and assistive tech. |
+| Auditability | The interface makes clear what was derived, from where, when, and by which workflow state. |
+
+Use this cognitive-load lens while scoring:
+
+- `Intrinsic load`: legal complexity the user must reason about, such as source
+  conflicts, missing signatures, date ambiguity, or review gates.
+- `Extraneous load`: avoidable UI friction, such as duplicate placeholders,
+  hidden evidence, detached source rails, vague labels, or ambiguous state.
+- `Germane load`: useful review pattern learning, such as consistent source
+  disclosures, gate language, and repeated issue sequencing.
+
+Case workspace regression checks:
+
+1. The first useful viewport answers: matter, source state, active issue, review
+   gate, and next action.
+2. Empty source surfaces do not reserve artifact UI. The source area appears
+   only when uploaded material or selected source content exists.
+3. Active review items expose enough source evidence to support trust without
+   making provenance feel like optional metadata.
+4. Attention queue interactions visibly change the active detail and source
+   evidence.
+5. Source list, selected PDF, and active issue feel like one workspace, not
+   disconnected administrative regions.
+6. Multi-document uploads remain bounded: the document switcher scrolls
+   internally, selected source content keeps a fixed viewport, and neither
+   collides with the footer input at common desktop widths.
+7. Footer input does not imply authority beyond the current harness context and
+   is disabled while operational intelligence is not ready.
+8. Mobile does not let the case rail dominate before the user can see
+   matter-critical context.
+9. Browser or Playwright validation includes desktop, one mobile viewport,
+   console health, nonblank checks, and one interaction proof for the target
+   flow.
+
+Current baseline flags to watch:
+
+- `/case/atlas-filing`: active review items should keep action, owner, blocking
+  state, and one source quote/citation composed in the same review unit.
+- `/case/atlas-filing`: additional provenance can stay progressively disclosed,
+  but the first supporting source must remain visible inline for the active
+  issue.
+- `/case/atlas-filing`: uploaded documents should stay as a compact case-scoped
+  switcher near the matter header, not a separate administrative rail.
+- `/case/atlas-filing`: selected PDF and active issue should sit side-by-side on
+  desktop widths without colliding with the footer input.
+- `/case/atlas-filing` mobile: navigation still appears before the matter work.
 
 ## Naming And File Conventions
 
@@ -187,6 +259,30 @@ The first control-surface workflow is OCR-to-controls:
 5. Review gates are computed by app code, not model discretion.
 6. Workspace shaping projects the harness bundle into the existing workspace tables.
 7. The UI receives AG-UI-compatible status and control events, never raw OCR markdown or provider output.
+
+The database keeps two layers deliberately separate:
+
+- `harness_runs`, `harness_run_sources`, `harness_run_steps`, and
+  `harness_run_artifacts` are the audit layer. They preserve run inputs,
+  step status, compact intermediate artifacts, final bundles, final workspace
+  shapes, token usage, errors, and timing.
+- `case_documents` stores case-scoped uploaded file metadata and the current
+  V1 file payload. The schema keeps `storage_kind` and `object_key` so the same
+  read path can move from `database_bytea` to object storage without changing
+  the case workspace contract.
+- `case_source_documents`, `case_source_spans`, facts, chronology events, and
+  issues remain the current UI read model. They are projections from harness
+  output, not the system of record for how the harness reached that output.
+
+Store query-critical fields as columns and evolving harness payloads as JSONB.
+Do not push raw provider responses into the UI read model. If a reviewer needs
+to understand a run, start from `harness_runs`, inspect ordered
+`harness_run_steps`, then open the matching artifacts and projected workspace
+records by source key and span key.
+
+Workspace shaping is idempotent by source key. If every requested OCR conversion
+already has a projected `case_source_documents` row for the case, the action
+hydrates the existing workspace and does not create a new harness run.
 
 ## Harness V1
 

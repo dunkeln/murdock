@@ -3,11 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { getCurrentUser } from "@/lib/server/auth/current-user";
 import {
   createCurrentUserCase,
   deleteCurrentUserCase,
   updateCurrentUserCaseTitle,
 } from "@/lib/server/cases/service";
+import { getCaseSummaryByUserAndId } from "@/lib/server/cases/repository";
+import { upsertCaseDocument } from "@/lib/server/documents/case-documents-repository";
+import { toUint8Array } from "@/lib/server/documents/content";
 import { ensureCurrentFirmMistralOcrConversion } from "@/lib/server/documents/ocr-conversions-service";
 import { withLangfuseObservation } from "@/lib/server/telemetry/langfuse";
 import {
@@ -24,11 +28,16 @@ const deleteCaseActionInputSchema = z.object({
   caseId: z.uuid(),
 });
 
+const ingestDocumentOcrActionInputSchema = z.object({
+  caseId: z.uuid().nullable(),
+});
+
 const shapeWorkspaceFromOcrActionInputSchema = z.object({
   caseId: z.uuid(),
   files: z
     .array(
       z.object({
+        caseDocumentId: z.uuid().nullable().optional(),
         fileName: z.string().min(1),
         ocrConversionId: z.uuid(),
       }),
@@ -74,6 +83,7 @@ export type DeleteCaseActionResult =
 export type IngestDocumentOcrActionResult =
   | {
       cached: boolean;
+      caseDocumentId: string | null;
       conversionId: string;
       errorMessage: string | null;
       expiresAt: string;
@@ -268,6 +278,9 @@ export async function ingestDocumentOcrAction(
     },
     async () => {
       const file = getOcrUploadFile(formData);
+      const parsedInput = ingestDocumentOcrActionInputSchema.parse({
+        caseId: formData.get("caseId") || null,
+      });
 
       if (!file || file.size === 0) {
         return {
@@ -284,14 +297,45 @@ export async function ingestDocumentOcrAction(
       }
 
       try {
+        const user = await getCurrentUser();
         const result = await ensureCurrentFirmMistralOcrConversion({
           fileName: file.name,
           content: file,
         });
+        let caseDocumentId: string | null = null;
+
+        if (parsedInput.caseId) {
+          const caseSummary = await getCaseSummaryByUserAndId({
+            caseId: parsedInput.caseId,
+            userId: user.id,
+          });
+
+          if (!caseSummary) {
+            return {
+              ok: false,
+              message: "Case not found.",
+            };
+          }
+
+          const bytes = await toUint8Array(file);
+          const caseDocument = await upsertCaseDocument({
+            bytes,
+            caseId: parsedInput.caseId,
+            documentSha256: result.conversion.documentSha256,
+            fileName: file.name,
+            firmId: user.firmId,
+            mimeType: file.type || "application/octet-stream",
+            ocrConversionId: result.conversion.id,
+            sizeBytes: file.size,
+          });
+
+          caseDocumentId = caseDocument.id;
+        }
 
         return {
           ok: true,
           cached: result.source === "cache",
+          caseDocumentId,
           conversionId: result.conversion.id,
           errorMessage: result.conversion.errorMessage,
           expiresAt: result.conversion.expiresAt,

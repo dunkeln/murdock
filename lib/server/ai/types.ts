@@ -5,7 +5,16 @@ import type { JsonObjectSchema } from "@/lib/server/ai/schema";
 
 export type ProviderId = "anthropic" | "openai";
 
+export type PromptCacheOptions = {
+  enabled: boolean;
+  ttl?: "5m" | "1h";
+};
+
 export type Usage = {
+  cacheCreationEphemeral1hInputTokens?: number | null;
+  cacheCreationEphemeral5mInputTokens?: number | null;
+  cacheCreationInputTokens?: number | null;
+  cacheReadInputTokens?: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
 };
@@ -17,6 +26,7 @@ export type ProviderGenerateInput = {
   model: string;
   schemaDescription: string;
   schemaName: string;
+  promptCache?: PromptCacheOptions | null;
   system: string | null;
   temperature: number | null;
 };

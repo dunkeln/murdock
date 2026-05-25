@@ -14,7 +14,13 @@
 /coverage
 /test-results/
 /playwright-report/
+/blob-report/
+/.vitest/
 /.nyc_output/
+/screenshots/
+/videos/
+/downloads/
+/playwright/.cache/
 
 # next.js
 /.next/
@@ -28,14 +34,28 @@
 /.cache/
 /.turbo/
 /.parcel-cache/
+/.vite/
 /.eslintcache
 .npm/
 .pnpm-store/
 
 # misc
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
 *.pem
 *.local
+*.local.*
+
+# editor and IDE local state
+/.idea/
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/settings.json.example
+*.swp
+*.swo
 
 # generated logs and diagnostics
 logs/
@@ -99,6 +119,8 @@ next-env.d.ts
 /exports/
 /artifacts/
 /examples/
+/fixtures/tmp/
+/.tmp/
 /tmp/
 /temp/
 

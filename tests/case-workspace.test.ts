@@ -36,7 +36,6 @@ function makeWorkspace(overrides: Partial<CaseWorkspaceDto> = {}) {
       title: "Example USCIS",
       type: "general",
       clientName: "Example client",
-      status: "review",
       priority: "high",
       nextAction: "Review surfaced deadline conflict",
       nextDeadlineAt: "2026-03-14T23:59:59.000Z",
@@ -53,6 +52,8 @@ function makeWorkspace(overrides: Partial<CaseWorkspaceDto> = {}) {
         caseDocumentId: null,
         ocrConversionId: null,
         documentSha256: null,
+        mimeType: null,
+        sizeBytes: null,
         ocrStatus: "ready",
         sourceDate: "2026-01-12T17:00:00.000Z",
         receivedAt: "2026-01-12T18:10:00.000Z",
@@ -178,6 +179,8 @@ describe("case workspace row mappers", () => {
       case_document_id: null,
       ocr_conversion_id: null,
       document_sha256: null,
+      mime_type: null,
+      size_bytes: null,
       ocr_status: "ready",
       source_date: "2026-01-12T17:00:00.000Z",
       received_at: "2026-01-12T18:10:00.000Z",
@@ -272,7 +275,6 @@ describe("case workspace deterministic issue handling", () => {
     const workspace = makeWorkspace();
 
     expect(getCaseWorkspaceCurrentState(workspace)).toMatchObject({
-      phaseLabel: "Review",
       readinessTone: "blocked",
       readinessLabel: "Needs review before reliance",
       openIssueCount: 1,

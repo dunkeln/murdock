@@ -97,3 +97,23 @@ User question
 Useful future tool boundaries include `getReadiness`, `searchFindings`, `getFinding`, `listIssues`, `listConflicts`, `searchSourceSpans`, and `getSourceSpan`. The model may plan retrieval and compose answers, but the app remains responsible for source truth, schema validation, review gates, conflict status, readiness state, persistence, and final legal workflow decisions.
 
 This supports the funnel strategy: wide OCR/source data stays in durable harness state, while the LLM pulls only the relevant slices needed for the current question. It also keeps token budget lower and prevents the footer runtime from becoming the workflow control plane.
+
+## Case Workspace UX Direction
+
+The case workspace should feel like an evolving legal matter, not a collection of AI tools. The lawyer or legal operator should see source material, quiet attention cues, and a ready/not-ready footer affordance, not harness telemetry, AG-UI event language, orchestration labels, or dashboard KPI behavior.
+
+Use a simple UI-facing DTO between the rich harness/workspace records and React. The current boundary is `CaseControlDto`: readiness, a primary attention item, a short queue, simple source refs, footer readiness, and basic case identity. The UI should consume this projection rather than receiving raw findings, conflicts, gates, source spans, AG-UI events, and harness stats separately.
+
+Quiet attention guidance is now the product rule. Importance should be communicated through spacing, grouping, hierarchy, order, progressive disclosure, and whether the footer send button is enabled. Avoid warning banners, excessive badges, redundant labels, heavy instructional text, and visible system orchestration. The interface should make the next thing feel naturally worth attention without telling the user they are being managed by software.
+
+Provenance remains essential but should be soft-revealed. Show enough context to earn trust, then keep source excerpts behind a small collapsed "Source" disclosure unless the lawyer asks to inspect. Trust first, inspect second.
+
+The document/source surface remains primary. During uploads or shaping, the source should remain readable while matter context quietly prepares. Use matter/source language such as "Reading", "Adding source to matter", or "Matter context updated"; avoid "OCR", "workspace controls", "AI controls", and other implementation language in normal UX copy.
+
+Wide-screen layout must be based on actual CSS viewport and available app space, not physical monitor size. The current case route uses conditional layout behavior: without a file rail, side-by-side source/attention can start earlier; with the uploaded file rail present, side-by-side waits until a wider breakpoint so the PDF is not squeezed. The route also constrains the workspace width to avoid sprawling across very large monitors.
+
+## Failure Memory
+
+Do not let backend/database implementation details leak into the case workspace UI. On May 25, 2026, a schema/persistence change caused `/case/rivera-intake` to render "Workspace tables are not available. Run database migrations." inside the carefully tuned empty workspace surface. That was a UX regression and a boundary failure: frontend surfaces should receive a UI-safe workspace contract from the backend, not reflect raw database availability or migration state. If workspace projection tables are unavailable, the backend should degrade to an empty case workspace or a controlled operational state while logging/observing the infrastructure issue server-side.
+
+Do not change stable case workspace UX while working on persistence unless the user explicitly asks for a UI change. Persistence work should preserve the known-good layout, footer behavior, empty states, document switcher behavior, and source/PDF geometry.

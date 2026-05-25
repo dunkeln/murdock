@@ -83,7 +83,6 @@ export function summarizeCaseWorkspace(
 export type CaseWorkspaceReadinessTone = "blocked" | "attention" | "ready";
 
 export type CaseWorkspaceCurrentState = {
-  phaseLabel: string;
   readinessTone: CaseWorkspaceReadinessTone;
   readinessLabel: string;
   readinessDetail: string;
@@ -110,15 +109,6 @@ export type CaseWorkspaceMomentumItem = {
   title: string;
   detail: string | null;
 };
-
-const statusLabels = {
-  intake: "Intake",
-  investigation: "Investigation",
-  review: "Review",
-  drafting: "Drafting",
-  filing: "Filing",
-  closed: "Closed",
-} satisfies Record<CaseWorkspaceDto["case"]["status"], string>;
 
 function compareIssuesByOperationalPriority(
   left: CaseWorkspaceIssueDto,
@@ -161,7 +151,6 @@ export function getCaseWorkspaceCurrentState(
 
   if (highSeverityIssueCount > 0 || contradictionCount > 0) {
     return {
-      phaseLabel: statusLabels[workspace.case.status],
       readinessTone: "blocked",
       readinessLabel: "Needs review before reliance",
       readinessDetail:
@@ -176,7 +165,6 @@ export function getCaseWorkspaceCurrentState(
 
   if (openIssues.length > 0) {
     return {
-      phaseLabel: statusLabels[workspace.case.status],
       readinessTone: "attention",
       readinessLabel: "Open items remain",
       readinessDetail:
@@ -190,7 +178,6 @@ export function getCaseWorkspaceCurrentState(
   }
 
   return {
-    phaseLabel: statusLabels[workspace.case.status],
     readinessTone: "ready",
     readinessLabel: "No surfaced blockers",
     readinessDetail:

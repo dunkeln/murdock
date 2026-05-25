@@ -16,7 +16,7 @@ export default async function AppLayout({
   const cases = await listCurrentUserCaseSummaries();
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-ink text-paper">
+    <div className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-ink text-paper">
       <header className="border-b border-paper/15">
         <div className="flex h-14 w-full items-center justify-between px-6 lg:px-8">
           <Link href="/" className="font-heading text-2xl uppercase leading-none">

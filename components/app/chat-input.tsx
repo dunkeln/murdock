@@ -34,7 +34,7 @@ export function ChatInput({
   caseId,
   className,
   contextLabel = "Matter input",
-  disabledReason = "Operational intelligence is still preparing.",
+  disabledReason = "Case context is not ready.",
   operationalReady = true,
   placeholder = "Ask from the current harness context...",
 }: ChatInputProps) {
@@ -80,7 +80,7 @@ export function ChatInput({
         value={question}
       />
       <Button
-        aria-label={operationalReady ? "Send message" : "Operational intelligence preparing"}
+        aria-label={operationalReady ? "Send message" : "Case context preparing"}
         className="rounded-none bg-paper text-ink hover:bg-paper/90"
         disabled={!canSubmit}
         size="icon-sm"

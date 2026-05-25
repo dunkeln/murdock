@@ -10,6 +10,7 @@ export const inputSchema = z.object({
   files: z
     .array(
       z.object({
+        caseDocumentId: z.uuid().nullable().optional(),
         fileName: z.string().min(1),
         ocrConversionId: z.uuid(),
       }),

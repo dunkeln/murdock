@@ -3,14 +3,43 @@ import "server-only";
 import type { CaseWorkspaceShapeResult } from "@/lib/contracts/case-workspace";
 import type { Finding, HarnessBundle } from "@/lib/contracts/harness";
 import type { OcrConversionDto } from "@/lib/contracts/ocr-conversions";
-import { runHarnessFromConversion } from "@/lib/server/harness/workflows/v1/run";
+import {
+  type HarnessRunObserver,
+  runHarnessFromConversion,
+} from "@/lib/server/harness/workflows/v1/run";
 import { fromHarnessError, safeKey, type ShapeError } from "@/lib/server/workflows/shape/schema";
 
 export type SourceInput = {
+  caseDocumentId?: string | null;
   conversion: OcrConversionDto;
   fileName: string;
   sourceKey: string;
 };
+
+export type HarnessBundleResult = {
+  bundle: HarnessBundle;
+  model: string;
+  provider: string;
+  source: SourceInput;
+  usage: { inputTokens: number | null; outputTokens: number | null };
+};
+
+export type ShapeFromOcrResult =
+  | {
+      bundles: HarnessBundleResult[];
+      shape: CaseWorkspaceShapeResult;
+    }
+  | ShapeError;
+
+const DEFAULT_MAX_SOURCE_CALLS = 2;
+
+function maxSourceCalls() {
+  const parsed = Number.parseInt(process.env.HARNESS_MAX_SOURCE_CALLS ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_SOURCE_CALLS;
+}
 
 function value(valueInput: unknown): string | null {
   if (valueInput === null || valueInput === undefined) {
@@ -138,34 +167,97 @@ function project(bundle: HarnessBundle): CaseWorkspaceShapeResult {
   };
 }
 
-export async function shapeFromOcr(input: {
+async function runSourceHarness(input: {
   caseId: string;
-  sources: SourceInput[];
-}): Promise<CaseWorkspaceShapeResult | ShapeError> {
-  const bundles = [];
+  index: number;
+  observerForSource?: (source: SourceInput, index: number) => HarnessRunObserver;
+  source: SourceInput;
+}): Promise<HarnessBundleResult | ShapeError> {
+  const result = await runHarnessFromConversion({
+    caseId: input.caseId,
+    conversion: input.source.conversion,
+    docId: input.source.sourceKey,
+    fileName: input.source.fileName,
+    observer: input.observerForSource?.(input.source, input.index),
+  });
 
-  for (const source of input.sources) {
-    const result = await runHarnessFromConversion({
-      caseId: input.caseId,
-      conversion: source.conversion,
-      docId: source.sourceKey,
-      fileName: source.fileName,
-    });
-
-    if (!result.ok) {
-      return fromHarnessError(result.error);
-    }
-    bundles.push(result.bundle);
+  if (!result.ok) {
+    return fromHarnessError(result.error);
   }
 
-  return bundles.map(project).reduce<CaseWorkspaceShapeResult>(
-    (merged, next) => ({
-      controlActions: [...merged.controlActions, ...next.controlActions],
-      chronologyEvents: [...merged.chronologyEvents, ...next.chronologyEvents],
-      facts: [...merged.facts, ...next.facts],
-      issues: [...merged.issues, ...next.issues],
-      sourceSpans: [...merged.sourceSpans, ...next.sourceSpans],
-    }),
-    { controlActions: [], chronologyEvents: [], facts: [], issues: [], sourceSpans: [] },
-  );
+  return {
+    bundle: result.bundle,
+    model: result.model,
+    provider: result.provider,
+    source: input.source,
+    usage: result.usage,
+  };
+}
+
+async function runSourceHarnesses(input: {
+  caseId: string;
+  observerForSource?: (source: SourceInput, index: number) => HarnessRunObserver;
+  sources: SourceInput[];
+}): Promise<HarnessBundleResult[] | ShapeError> {
+  const results: Array<HarnessBundleResult | undefined> = [];
+  let firstError: ShapeError | null = null;
+  let nextIndex = 0;
+  const workerCount = Math.min(maxSourceCalls(), input.sources.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (!firstError) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      if (index >= input.sources.length) {
+        return;
+      }
+
+      const source = input.sources[index]!;
+      const result = await runSourceHarness({
+        caseId: input.caseId,
+        index,
+        observerForSource: input.observerForSource,
+        source,
+      });
+
+      if ("isError" in result) {
+        firstError = result;
+        return;
+      }
+
+      results[index] = result;
+    }
+  });
+
+  await Promise.all(workers);
+
+  return firstError
+    ? firstError
+    : results.filter((result): result is HarnessBundleResult => Boolean(result));
+}
+
+export async function shapeFromOcr(input: {
+  caseId: string;
+  observerForSource?: (source: SourceInput, index: number) => HarnessRunObserver;
+  sources: SourceInput[];
+}): Promise<ShapeFromOcrResult> {
+  const bundles = await runSourceHarnesses(input);
+
+  if ("isError" in bundles) {
+    return bundles;
+  }
+
+  return {
+    bundles,
+    shape: bundles.map((result) => project(result.bundle)).reduce<CaseWorkspaceShapeResult>(
+      (merged, next) => ({
+        controlActions: [...merged.controlActions, ...next.controlActions],
+        chronologyEvents: [...merged.chronologyEvents, ...next.chronologyEvents],
+        facts: [...merged.facts, ...next.facts],
+        issues: [...merged.issues, ...next.issues],
+        sourceSpans: [...merged.sourceSpans, ...next.sourceSpans],
+      }),
+      { controlActions: [], chronologyEvents: [], facts: [], issues: [], sourceSpans: [] },
+    ),
+  };
 }

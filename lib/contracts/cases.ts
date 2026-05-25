@@ -1,16 +1,5 @@
 import { z } from "zod";
 
-export const caseStatusSchema = z.enum([
-  "intake",
-  "investigation",
-  "review",
-  "drafting",
-  "filing",
-  "closed",
-]);
-
-export type CaseStatus = z.infer<typeof caseStatusSchema>;
-
 export const casePrioritySchema = z.enum(["low", "normal", "high", "urgent"]);
 
 export type CasePriority = z.infer<typeof casePrioritySchema>;
@@ -31,7 +20,6 @@ export const caseSummaryDtoSchema = z.object({
   title: z.string().min(1),
   type: caseTypeSchema,
   clientName: z.string().min(1).nullable(),
-  status: caseStatusSchema,
   priority: casePrioritySchema,
   nextAction: z.string().min(1).nullable(),
   nextDeadlineAt: isoDateTimeSchema.nullable(),
@@ -44,7 +32,6 @@ export const createCaseInputSchema = z.object({
   title: z.string().min(1),
   clientName: z.string().min(1).nullable().default(null),
   type: caseTypeSchema.default("general"),
-  status: caseStatusSchema.default("intake"),
   priority: casePrioritySchema.default("normal"),
   practiceArea: z.string().min(1).nullable().default(null),
 });
@@ -56,7 +43,6 @@ export const updateCaseInputSchema = z.object({
   title: z.string().min(1).optional(),
   clientName: z.string().min(1).nullable().optional(),
   type: caseTypeSchema.optional(),
-  status: caseStatusSchema.optional(),
   priority: casePrioritySchema.optional(),
   nextAction: z.string().min(1).nullable().optional(),
 });
@@ -64,7 +50,6 @@ export const updateCaseInputSchema = z.object({
 export type UpdateCaseInput = z.input<typeof updateCaseInputSchema>;
 
 export const listCasesInputSchema = z.object({
-  status: caseStatusSchema.optional(),
   type: caseTypeSchema.optional(),
   priority: casePrioritySchema.optional(),
   limit: z.number().int().min(1).max(100).default(25),

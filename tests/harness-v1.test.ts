@@ -6,6 +6,7 @@ import { mapCandidate } from "@/lib/server/harness/workflows/v1/extract";
 import { computeGates } from "@/lib/server/harness/workflows/v1/gates";
 import { qualityFindings } from "@/lib/server/harness/workflows/v1/quality";
 import { findConflicts } from "@/lib/server/harness/workflows/v1/reconcile";
+import { qualityStep, runHarness } from "@/lib/server/harness/workflows/v1/run";
 import { splitSource } from "@/lib/server/harness/workflows/v1/segment";
 import { buildSourceMap } from "@/lib/server/harness/workflows/v1/source";
 
@@ -238,5 +239,52 @@ describe("harness v1", () => {
         },
       }),
     ).not.toThrow();
+  });
+
+  it("emits ordered step and artifact events for durable run persistence", async () => {
+    const steps: string[] = [];
+    const artifacts: string[] = [];
+
+    const result = await runHarness(
+      {
+        caseId,
+        documentSha256:
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        fileName: "asset-schedule.pdf",
+        ocrConversionId: "22222222-2222-4222-8222-222222222222",
+        ocrResult: {
+          markdown: "Purchase price: $250,000.",
+          model: "mistral-ocr-latest",
+          pages: [
+            {
+              dimensions: null,
+              images: [],
+              index: 0,
+              markdown: "Purchase price: $250,000.",
+            },
+          ],
+          usage: { docSizeBytes: null, pagesProcessed: 1 },
+        },
+        observer: {
+          onArtifact: (event) => {
+            artifacts.push(`${event.ordinal}:${event.kind}:${event.status}`);
+          },
+          onStepFinished: (event) => {
+            steps.push(`${event.ordinal}:${event.stepName}:${event.status}`);
+          },
+        },
+        providerModel: "mistral-ocr-latest",
+      },
+      [qualityStep],
+    );
+
+    expect(result.ok).toBe(true);
+    expect(steps).toEqual([
+      "0:source-map:succeeded",
+      "1:quality:succeeded",
+    ]);
+    expect(artifacts).toContain("0:source_map:succeeded");
+    expect(artifacts).toContain("1:quality_findings:succeeded");
+    expect(artifacts).toContain("2:bundle:succeeded");
   });
 });

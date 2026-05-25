@@ -31,7 +31,7 @@ export function ModeSwitcher() {
   return (
     <Toggle
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className="size-8 min-w-8 rounded-none border-paper/15 bg-ink p-0 text-paper hover:!bg-paper hover:!text-ink data-[state=on]:!bg-ink data-[state=on]:!text-paper data-[state=on]:hover:!bg-paper data-[state=on]:hover:!text-ink"
+      className="hover-theme-invert size-8 min-w-8 rounded-none border-paper/15 bg-ink p-0 text-paper data-[state=on]:!bg-ink data-[state=on]:!text-paper data-[state=on]:hover:!bg-paper data-[state=on]:hover:!text-ink"
       onClick={() => setTheme(nextTheme)}
       pressed={isDark}
       size="sm"

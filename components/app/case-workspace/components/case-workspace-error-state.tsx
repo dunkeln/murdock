@@ -11,7 +11,6 @@ export function CaseWorkspaceErrorState({
 }: CaseWorkspaceErrorStateProps) {
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm font-medium text-paper/60">Case workspace</p>
       <h1 className="font-heading text-5xl uppercase leading-none sm:text-6xl">
         {fallbackTitle}
       </h1>

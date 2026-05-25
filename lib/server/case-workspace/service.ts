@@ -12,7 +12,10 @@ import {
   getCaseSummaryByUserAndSlug,
 } from "@/lib/server/cases/repository";
 import { toCaseWorkspaceServiceError } from "@/lib/server/case-workspace/errors";
-import { getCaseWorkspaceRecordsByCaseId } from "@/lib/server/case-workspace/repository";
+import {
+  type CaseWorkspaceRecords,
+  getCaseWorkspaceRecordsByCaseId,
+} from "@/lib/server/case-workspace/repository";
 import {
   withLangfuseObservation,
   withLangfuseTrace,
@@ -27,6 +30,33 @@ export type GetCurrentUserCaseWorkspaceResult =
       error: CaseWorkspaceServiceError;
       ok: false;
     };
+
+function emptyWorkspaceRecords(): CaseWorkspaceRecords {
+  return {
+    chronologyEvents: [],
+    facts: [],
+    issues: [],
+    sourceDocuments: [],
+    sourceSpans: [],
+  };
+}
+
+function isMissingWorkspaceProjectionTable(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const workspaceTables = [
+    "public.case_source_documents",
+    "public.case_source_spans",
+    "public.case_operational_facts",
+    "public.case_chronology_events",
+    "public.case_operational_issues",
+  ];
+
+  return (
+    message.includes("relation") &&
+    message.includes("does not exist") &&
+    workspaceTables.some((tableName) => message.includes(tableName))
+  );
+}
 
 export async function getCurrentUserCaseWorkspaceBySlug(
   slug: string
@@ -129,7 +159,6 @@ async function loadCaseWorkspaceForUser(input: {
       output: (caseSummaryResult) => ({
         found: Boolean(caseSummaryResult),
         caseId: caseSummaryResult?.id ?? null,
-        status: caseSummaryResult?.status ?? null,
       }),
     },
     () =>
@@ -169,10 +198,19 @@ async function loadCaseWorkspaceForUser(input: {
         issues: recordsResult.issues.length,
       }),
     },
-    () =>
-      getCaseWorkspaceRecordsByCaseId({
-        caseId: caseSummary.id,
-      })
+    async () => {
+      try {
+        return await getCaseWorkspaceRecordsByCaseId({
+          caseId: caseSummary.id,
+        });
+      } catch (error) {
+        if (isMissingWorkspaceProjectionTable(error)) {
+          return emptyWorkspaceRecords();
+        }
+
+        throw error;
+      }
+    }
   );
 
   return {

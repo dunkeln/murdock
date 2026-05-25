@@ -17,8 +17,9 @@ import { compileDraft } from "@/lib/server/harness/workflows/v1/draft";
 import type { Segment } from "@/lib/server/harness/workflows/v1/segment";
 
 const promptPath = join(process.cwd(), "prompts", "harness-v1.md");
-const MAX_SEGMENT_CALLS = 2;
+const DEFAULT_MAX_SEGMENT_CALLS = 2;
 const rawDraftSchema = z.record(z.string(), z.unknown());
+let promptTextPromise: Promise<string> | null = null;
 
 const candidateSchema = z.object({
   drafts: z.array(rawDraftSchema).min(1),
@@ -116,8 +117,21 @@ function candidateInput(value: unknown): unknown {
   return value;
 }
 
+function maxSegmentCalls() {
+  const parsed = Number.parseInt(
+    process.env.HARNESS_MAX_SEGMENT_CALLS ?? "",
+    10,
+  );
+
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_SEGMENT_CALLS;
+}
+
 async function prompt() {
-  return readFile(promptPath, "utf8");
+  promptTextPromise ??= readFile(promptPath, "utf8");
+
+  return promptTextPromise;
 }
 
 export async function extractFindings(input: {
@@ -171,7 +185,7 @@ async function callSegments(input: {
     { result: GenerateObjectResult<Candidate>; segment: Segment } | undefined
   > = [];
   let nextIndex = 0;
-  const workerCount = Math.min(MAX_SEGMENT_CALLS, input.segments.length);
+  const workerCount = Math.min(maxSegmentCalls(), input.segments.length);
   const workers = Array.from({ length: workerCount }, async () => {
     let currentIndex = nextIndex;
     nextIndex += 1;
@@ -216,6 +230,7 @@ async function callModel(input: {
     maxOutputTokens: 4096,
     messages: [{ role: "user", content: inputForModel(input) }],
     preferredProvider: "anthropic",
+    promptCache: { enabled: true, ttl: "5m" },
     schema: envelopeSchema,
     schemaDescription:
       "Object with draftsJson, a JSON string matching the draft schema.",

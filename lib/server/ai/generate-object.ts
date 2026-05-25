@@ -16,7 +16,11 @@ import { anthropicProvider } from "@/lib/server/ai/providers/anthropic";
 import { openaiProvider } from "@/lib/server/ai/providers/openai";
 import { selectModelRoutes } from "@/lib/server/ai/router";
 import { toObjectJsonSchema } from "@/lib/server/ai/schema";
-import type { Provider, ProviderGenerateInput } from "@/lib/server/ai/types";
+import type {
+  PromptCacheOptions,
+  Provider,
+  ProviderGenerateInput,
+} from "@/lib/server/ai/types";
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 2048;
 
@@ -31,6 +35,7 @@ export type GenerateObjectInput<TSchema extends z.ZodType> = {
   messages: Message[];
   model?: string;
   preferredProvider?: string | null;
+  promptCache?: PromptCacheOptions | null;
   schema: TSchema;
   schemaDescription?: string;
   schemaName: string;
@@ -94,6 +99,7 @@ export async function generateObject<TSchema extends z.ZodType>(
       maxOutputTokens: input.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       messages,
       model,
+      promptCache: input.promptCache ?? null,
       schema: input.schema,
       schemaDescription:
         input.schemaDescription ??

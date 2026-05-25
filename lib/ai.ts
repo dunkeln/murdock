@@ -104,6 +104,10 @@ export type GenerateObjectResult<TData> =
       ok: true;
       provider: string;
       usage: {
+        cacheCreationEphemeral1hInputTokens?: number | null;
+        cacheCreationEphemeral5mInputTokens?: number | null;
+        cacheCreationInputTokens?: number | null;
+        cacheReadInputTokens?: number | null;
         inputTokens: number | null;
         outputTokens: number | null;
       };

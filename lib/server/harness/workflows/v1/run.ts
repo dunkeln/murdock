@@ -40,6 +40,38 @@ export type Step = {
   run: (ctx: Ctx) => Promise<Ctx | HarnessError> | Ctx | HarnessError;
 };
 
+export type HarnessRunStepStatus = "started" | "succeeded" | "failed";
+
+export type HarnessRunArtifactKind =
+  | "source_map"
+  | "quality_findings"
+  | "segments"
+  | "extracted_findings"
+  | "bundle"
+  | "error";
+
+export type HarnessRunObserver = {
+  onArtifact?: (input: {
+    artifact: unknown;
+    kind: HarnessRunArtifactKind;
+    ordinal: number;
+    status: Exclude<HarnessRunStepStatus, "started">;
+    stepName: string;
+    summary: Record<string, unknown>;
+  }) => Promise<void> | void;
+  onStepFinished?: (input: {
+    error: HarnessError | null;
+    metrics: Record<string, unknown>;
+    ordinal: number;
+    status: Exclude<HarnessRunStepStatus, "started">;
+    stepName: string;
+  }) => Promise<void> | void;
+  onStepStarted?: (input: {
+    ordinal: number;
+    stepName: string;
+  }) => Promise<void> | void;
+};
+
 export type RunInput = {
   budget?: Budget;
   caseId?: string | null;
@@ -48,6 +80,7 @@ export type RunInput = {
   fileName: string;
   ocrConversionId?: string | null;
   ocrResult: MistralOcrResult;
+  observer?: HarnessRunObserver;
   provider?: "mistral";
   providerModel: string;
 };
@@ -58,6 +91,7 @@ export type RunConversionInput = {
   conversion: OcrConversionDto;
   docId?: string | null;
   fileName: string;
+  observer?: HarnessRunObserver;
 };
 
 export type RunResult =
@@ -132,6 +166,75 @@ export const extractStep: Step = {
 
 export const v1Steps = [qualityStep, segmentStep, extractStep];
 
+function compactSource(source: SourceMap | null) {
+  if (!source) {
+    return null;
+  }
+
+  return {
+    docs: source.docs,
+    pageCount: source.pages.length,
+    sourceSpans: source.sourceSpans,
+    spanCount: source.sourceSpans.length,
+  };
+}
+
+function compactSegments(segments: Segment[]) {
+  return segments.map((segment) => ({
+    index: segment.index,
+    spanIds: segment.spans.map((span) => span.id),
+    spans: segment.spans,
+    text: segment.text,
+  }));
+}
+
+function stepArtifactKind(stepName: string): HarnessRunArtifactKind {
+  if (stepName === "source-map") {
+    return "source_map";
+  }
+  if (stepName === "quality") {
+    return "quality_findings";
+  }
+  if (stepName === "segment") {
+    return "segments";
+  }
+
+  return "extracted_findings";
+}
+
+function summarizeCtx(ctx: Ctx): Record<string, unknown> {
+  return {
+    docCount: ctx.source?.docs.length ?? 0,
+    findingCount: ctx.findings.length,
+    inputTokens: ctx.usage.inputTokens,
+    outputTokens: ctx.usage.outputTokens,
+    segmentCount: ctx.segments.length,
+    spanCount: ctx.source?.sourceSpans.length ?? 0,
+  };
+}
+
+function stepArtifact(stepName: string, ctx: Ctx) {
+  if (stepName === "source-map") {
+    return compactSource(ctx.source);
+  }
+  if (stepName === "quality") {
+    return {
+      findings: ctx.findings,
+    };
+  }
+  if (stepName === "segment") {
+    return {
+      budget: ctx.budget ?? null,
+      segments: compactSegments(ctx.segments),
+    };
+  }
+
+  return {
+    findings: ctx.findings,
+    usage: ctx.usage,
+  };
+}
+
 function toBundle(ctx: Ctx): HarnessBundle {
   if (!ctx.source) {
     throw new Error("Harness source map was not built.");
@@ -172,37 +275,108 @@ export async function runHarness(
     usage: { inputTokens: 0, outputTokens: 0 },
   };
 
+  let activeStep: { name: string; ordinal: number } | null = null;
+
   try {
-    for (const step of [sourceStep(input), ...steps]) {
+    for (const [index, step] of [sourceStep(input), ...steps].entries()) {
+      activeStep = { name: step.name, ordinal: index };
+      await input.observer?.onStepStarted?.({
+        ordinal: index,
+        stepName: step.name,
+      });
+
       const next = await step.run(ctx);
 
       if (isError(next)) {
+        await input.observer?.onStepFinished?.({
+          error: next,
+          metrics: summarizeCtx(ctx),
+          ordinal: index,
+          status: "failed",
+          stepName: step.name,
+        });
+        await input.observer?.onArtifact?.({
+          artifact: next,
+          kind: "error",
+          ordinal: index,
+          status: "failed",
+          stepName: step.name,
+          summary: {
+            errorCategory: next.errorCategory,
+            isRetryable: next.isRetryable,
+          },
+        });
         return { ok: false, error: next };
       }
       ctx = next;
+      await input.observer?.onArtifact?.({
+        artifact: stepArtifact(step.name, ctx),
+        kind: stepArtifactKind(step.name),
+        ordinal: index,
+        status: "succeeded",
+        stepName: step.name,
+        summary: summarizeCtx(ctx),
+      });
+      await input.observer?.onStepFinished?.({
+        error: null,
+        metrics: summarizeCtx(ctx),
+        ordinal: index,
+        status: "succeeded",
+        stepName: step.name,
+      });
     }
+
+    const bundle = toBundle(ctx);
+    await input.observer?.onArtifact?.({
+      artifact: bundle,
+      kind: "bundle",
+      ordinal: steps.length + 1,
+      status: "succeeded",
+      stepName: "bundle",
+      summary: bundle.stats,
+    });
 
     return {
       ok: true,
-      bundle: toBundle(ctx),
+      bundle,
       model: ctx.model,
       provider: ctx.provider,
       usage: ctx.usage,
     };
   } catch (error) {
-    return {
-      ok: false,
-      error: harnessErrorSchema.parse({
-        isError: true,
-        errorCategory:
-          error instanceof Error && error.message.includes("ready")
-            ? "ocr_not_ready"
-            : "unknown",
-        isRetryable: true,
-        message: error instanceof Error ? error.message : "Harness failed.",
-        provider: null,
-      }),
-    };
+    const harnessError = harnessErrorSchema.parse({
+      isError: true,
+      errorCategory:
+        error instanceof Error && error.message.includes("ready")
+          ? "ocr_not_ready"
+          : "unknown",
+      isRetryable: true,
+      message: error instanceof Error ? error.message : "Harness failed.",
+      provider: null,
+    });
+
+    if (activeStep) {
+      await input.observer?.onStepFinished?.({
+        error: harnessError,
+        metrics: summarizeCtx(ctx),
+        ordinal: activeStep.ordinal,
+        status: "failed",
+        stepName: activeStep.name,
+      });
+      await input.observer?.onArtifact?.({
+        artifact: harnessError,
+        kind: "error",
+        ordinal: activeStep.ordinal,
+        status: "failed",
+        stepName: activeStep.name,
+        summary: {
+          errorCategory: harnessError.errorCategory,
+          isRetryable: harnessError.isRetryable,
+        },
+      });
+    }
+
+    return { ok: false, error: harnessError };
   }
 }
 
@@ -232,6 +406,7 @@ export async function runHarnessFromConversion(input: RunConversionInput) {
       })),
       usage: { docSizeBytes: null, pagesProcessed: source.pages.length },
     },
+    observer: input.observer,
     provider: doc.provider,
     providerModel: doc.providerModel,
   });

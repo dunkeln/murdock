@@ -109,7 +109,6 @@ export function buildHarnessQueryContext(workspace: CaseWorkspaceDto) {
     case: {
       id: workspace.case.id,
       title: workspace.case.title,
-      status: workspace.case.status,
       type: workspace.case.type,
     },
     documents: reflection.docs.map((doc) => ({

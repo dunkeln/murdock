@@ -19,6 +19,7 @@ export async function persistShape(input: {
 }) {
   const docs = await upsertCaseWorkspaceSourceDocuments(
     input.sources.map((source) => ({
+      caseDocumentId: source.caseDocumentId ?? null,
       caseId: input.caseId,
       documentSha256: source.conversion.documentSha256,
       fileName: source.fileName,

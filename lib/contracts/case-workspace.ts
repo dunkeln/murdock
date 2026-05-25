@@ -112,6 +112,8 @@ export const caseWorkspaceSourceDocumentDtoSchema = z.object({
   caseDocumentId: z.uuid().nullable(),
   ocrConversionId: z.uuid().nullable(),
   documentSha256: documentSha256Schema.nullable(),
+  mimeType: z.string().min(1).nullable(),
+  sizeBytes: z.number().int().positive().nullable(),
   ocrStatus: ocrConversionStatusSchema.nullable(),
   sourceDate: isoDateTimeSchema.nullable(),
   receivedAt: isoDateTimeSchema.nullable(),

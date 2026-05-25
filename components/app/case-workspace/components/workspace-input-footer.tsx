@@ -35,7 +35,7 @@ export function WorkspaceInputFooter({
   return (
     <footer
       className={cn(
-        "shrink-0 border-t border-paper/10 bg-ink/95 px-1 pb-1 pt-4",
+        "flex h-20 shrink-0 items-center justify-center border-t border-paper/10 bg-ink/95 px-1",
         className
       )}
       data-operational-ready={operationalReady}
@@ -44,7 +44,7 @@ export function WorkspaceInputFooter({
         caseId={caseId}
         className="mx-auto"
         contextLabel={contextLabel}
-        disabledReason="Operational intelligence is still preparing for the checked documents."
+        disabledReason="Case context is not ready."
         operationalReady={operationalReady}
         placeholder={placeholder}
       />

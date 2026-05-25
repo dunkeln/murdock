@@ -25,6 +25,8 @@ export type CaseWorkspaceSourceDocumentRow = {
   case_document_id: string | null;
   ocr_conversion_id: string | null;
   document_sha256: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
   ocr_status: OcrConversionStatus | null;
   source_date: DateValue;
   received_at: DateValue;
@@ -147,6 +149,8 @@ export function toCaseWorkspaceSourceDocumentDto(
     caseDocumentId: row.case_document_id,
     ocrConversionId: row.ocr_conversion_id,
     documentSha256: row.document_sha256,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
     ocrStatus: row.ocr_status,
     sourceDate: toIsoDateTime(row.source_date),
     receivedAt: toIsoDateTime(row.received_at),
