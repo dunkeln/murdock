@@ -36,6 +36,22 @@ function toOcrResult(response: Awaited<ReturnType<ReturnType<typeof createMistra
     pages: response.pages.map((page) => ({
       index: page.index,
       markdown: page.markdown,
+      dimensions: page.dimensions
+        ? {
+            dpi: page.dimensions.dpi ?? null,
+            height: page.dimensions.height ?? null,
+            width: page.dimensions.width ?? null,
+          }
+        : null,
+      images: page.images.map((image) => ({
+        id: image.id,
+        topLeftX: image.topLeftX,
+        topLeftY: image.topLeftY,
+        bottomRightX: image.bottomRightX,
+        bottomRightY: image.bottomRightY,
+        imageBase64: image.imageBase64 ?? null,
+        imageAnnotation: image.imageAnnotation ?? null,
+      })),
     })),
     markdown: response.pages.map((page) => page.markdown).join("\n\n"),
     usage: {
@@ -45,7 +61,7 @@ function toOcrResult(response: Awaited<ReturnType<ReturnType<typeof createMistra
   });
 }
 
-export async function ocrDocumentUrl(
+async function ocrDocumentUrl(
   input: OcrDocumentUrlInput
 ): Promise<DocumentIngestionResult<MistralOcrResult>> {
   const parsedInput = ocrDocumentUrlInputSchema.safeParse(input);
@@ -77,7 +93,7 @@ export async function ocrDocumentUrl(
   }
 }
 
-export async function uploadDocumentForOcr(
+async function uploadDocumentForOcr(
   input: OcrUploadedDocumentInput
 ): Promise<DocumentIngestionResult<MistralUploadedDocument>> {
   const parsedInput = ocrUploadedDocumentInputSchema.safeParse(input);

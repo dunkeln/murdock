@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema-jsonc.json",
+  "entry": [
+    "app/**/*.{ts,tsx}",
+    "tests/**/*.test.ts",
+    "instrumentation*.ts"
+  ],
+  "project": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "lib/**/*.ts",
+    "tests/**/*.ts",
+    "*.config.{js,mjs,ts}",
+    "instrumentation*.ts"
+  ],
+  "ignoreDependencies": [
+    "playwright",
+    "shadcn",
+    "tailwindcss",
+    "tw-animate-css"
+  ]
+}

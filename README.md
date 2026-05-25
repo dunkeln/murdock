@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Murdock
 
-## Getting Started
+Murdock is a provenance-first operational legal workspace. The current product
+slice is an OCR-document harness that turns already-OCR'd legal document bundles
+into source-grounded findings, conflicts, validation-aware review gates, and
+workspace controls.
 
-First, run the development server:
+The model is bounded to extraction and summarization. The app owns schemas,
+validation, routing, human gates, workflow state, and audit state.
+
+## Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Core server-backed features use:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+NEON_CONN_URL=
+MISTRAL_API_KEY=
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=
+```
 
-## Learn More
+## Harness V1
 
-To learn more about Next.js, take a look at the following resources:
+The v1 harness starts after OCR:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```text
+OCR bundle
+-> source map
+-> document quality findings
+-> tolerant Anthropic draft extraction
+-> app compilation into strict findings
+-> conflict reconciliation
+-> deterministic review gates
+-> workspace projection
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The internal contract is `harness.v1` with five primitives:
 
-## Deploy on Vercel
+- `SourceSpan`
+- `FindingDraft`
+- `Finding`
+- `Conflict`
+- `ReviewGate`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The harness uses a tolerant-reader funnel before commitment: model-facing drafts
+may carry small extra metadata, but durable findings, conflicts, gates, and
+workspace records are strict app-owned outputs.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+No external legal research, autonomous escalation, or model-owned workflow
+control is in scope for this slice.
+
+## Checks
+
+```bash
+npm run audit:lean
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+Real OCR plus Anthropic E2E can be run explicitly:
+
+```bash
+RUN_HARNESS_E2E=1 npx vitest run tests/harness-e2e.test.ts --testTimeout 240000
+```

@@ -3,8 +3,23 @@
 import { Loader2 } from "lucide-react";
 import * as React from "react";
 
+import { cn } from "@/lib/utils";
+
+export type PdfPageMarker = {
+  id: string;
+  label: string;
+  pageIndex: number;
+  priority: "critical" | "high" | "medium" | "low";
+  title: string;
+};
+
 type PdfViewerProps = {
+  activeMarkerId?: string | null;
   file: File | null;
+  label?: string;
+  markers?: PdfPageMarker[];
+  onMarkerSelect?: (markerId: string) => void;
+  sourceUrl?: string | null;
 };
 
 type PdfDocumentProxy = Awaited<
@@ -12,6 +27,9 @@ type PdfDocumentProxy = Awaited<
 >;
 
 type PdfPageProps = {
+  activeMarkerId?: string | null;
+  markers: PdfPageMarker[];
+  onMarkerSelect?: (markerId: string) => void;
   pageNumber: number;
   pdfDocument: PdfDocumentProxy;
 };
@@ -25,7 +43,17 @@ function isRenderingCancelled(error: unknown) {
   return error instanceof Error && error.name === "RenderingCancelledException";
 }
 
-function PdfPage({ pageNumber, pdfDocument }: PdfPageProps) {
+function markerLabel(marker: PdfPageMarker) {
+  return `${marker.label}. ${marker.title}`;
+}
+
+function PdfPage({
+  activeMarkerId,
+  markers,
+  onMarkerSelect,
+  pageNumber,
+  pdfDocument,
+}: PdfPageProps) {
   const [canvasWidth, setCanvasWidth] = React.useState(0);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
@@ -96,36 +124,119 @@ function PdfPage({ pageNumber, pdfDocument }: PdfPageProps) {
   }, [canvasWidth, pageNumber, pdfDocument]);
 
   return (
-    <canvas
-      className="w-full bg-white"
-      data-pdf-page={pageNumber}
-      ref={canvasRef}
-    />
+    <div
+      className="grid grid-cols-[minmax(0,1fr)_1.75rem] items-start gap-1"
+      data-pdf-page-frame={pageNumber}
+    >
+      <canvas
+        className="w-full bg-white"
+        data-pdf-page={pageNumber}
+        ref={canvasRef}
+      />
+      <div
+        aria-label={`Page ${pageNumber} review pins`}
+        className="flex min-h-12 flex-col items-center gap-1 pt-2"
+      >
+        {markers.map((marker) => {
+          const isActive = marker.id === activeMarkerId;
+
+          return (
+            <button
+              aria-label={`Show finding ${markerLabel(marker)} on page ${pageNumber}`}
+              aria-pressed={isActive}
+              className={cn(
+                "flex size-5 items-center justify-center border border-paper/25 bg-ink text-[0.625rem] font-medium leading-none text-paper/70 transition-colors hover:border-paper hover:bg-paper hover:text-ink",
+                isActive && "border-paper bg-paper text-ink",
+                marker.priority === "high" &&
+                  !isActive &&
+                  "border-destructive/70 text-destructive",
+                marker.priority === "critical" &&
+                  !isActive &&
+                  "border-destructive text-destructive",
+              )}
+              data-pdf-marker={marker.id}
+              key={marker.id}
+              onClick={() => onMarkerSelect?.(marker.id)}
+              title={markerLabel(marker)}
+              type="button"
+            >
+              {marker.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-export function PdfViewer({ file }: PdfViewerProps) {
+export function PdfViewer({
+  activeMarkerId = null,
+  file,
+  label,
+  markers = [],
+  onMarkerSelect,
+  sourceUrl = null,
+}: PdfViewerProps) {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [pdfDocument, setPdfDocument] = React.useState<PdfDocumentProxy | null>(
     null
   );
   const [pageNumbers, setPageNumbers] = React.useState<number[]>([]);
-  const pdfUrl = React.useMemo(() => {
-    if (!file || file.type !== "application/pdf") {
-      return null;
+  const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
+  const markersByPage = React.useMemo(() => {
+    const nextMarkers = new Map<number, PdfPageMarker[]>();
+
+    for (const marker of markers) {
+      const pageNumber = marker.pageIndex + 1;
+      const pageMarkers = nextMarkers.get(pageNumber) ?? [];
+
+      pageMarkers.push(marker);
+      nextMarkers.set(pageNumber, pageMarkers);
     }
 
-    return URL.createObjectURL(file);
-  }, [file]);
+    return nextMarkers;
+  }, [markers]);
 
   React.useEffect(() => {
-    return () => {
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
+    let isCancelled = false;
+
+    if (sourceUrl) {
+      queueMicrotask(() => {
+        if (!isCancelled) {
+          setPdfUrl(sourceUrl);
+        }
+      });
+
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    if (!file || file.type !== "application/pdf") {
+      queueMicrotask(() => {
+        if (!isCancelled) {
+          setPdfUrl(null);
+        }
+      });
+
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    const nextPdfUrl = URL.createObjectURL(file);
+    queueMicrotask(() => {
+      if (!isCancelled) {
+        setPdfUrl(nextPdfUrl);
       }
+    });
+
+    return () => {
+      isCancelled = true;
+      URL.revokeObjectURL(nextPdfUrl);
     };
-  }, [pdfUrl]);
+  }, [file, sourceUrl]);
 
   React.useEffect(() => {
     let isCancelled = false;
@@ -145,12 +256,7 @@ export function PdfViewer({ file }: PdfViewerProps) {
       setPageNumbers([]);
 
       try {
-        const pdfjs = await import("pdfjs-dist");
-
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/build/pdf.worker.min.mjs",
-          import.meta.url
-        ).toString();
+        const pdfjs = await import("pdfjs-dist/webpack.mjs");
 
         const pdf = await pdfjs.getDocument(pdfUrl).promise;
         const renderedPageNumbers = Array.from(
@@ -193,8 +299,8 @@ export function PdfViewer({ file }: PdfViewerProps) {
 
   return (
     <section
-      aria-label={file?.name ?? "Selected PDF"}
-      className="min-h-0 w-full overflow-hidden border border-paper/15 md:w-[50vw] md:max-w-3xl"
+      aria-label={label ?? file?.name ?? "Selected PDF"}
+      className="h-full min-h-0 w-full max-w-full overflow-hidden border border-paper/15"
       data-pdf-viewer
     >
       <div
@@ -214,7 +320,10 @@ export function PdfViewer({ file }: PdfViewerProps) {
         {pdfDocument
           ? pageNumbers.map((pageNumber) => (
               <PdfPage
+                activeMarkerId={activeMarkerId}
                 key={pageNumber}
+                markers={markersByPage.get(pageNumber) ?? []}
+                onMarkerSelect={onMarkerSelect}
                 pageNumber={pageNumber}
                 pdfDocument={pdfDocument}
               />

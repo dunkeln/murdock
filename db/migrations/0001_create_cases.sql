@@ -5,7 +5,6 @@ create table if not exists public.cases (
   title text not null,
   type text not null default 'general',
   client_name text null,
-  status text not null default 'intake',
   priority text not null default 'normal',
   next_action text null,
   next_deadline_at timestamptz null,
@@ -13,9 +12,6 @@ create table if not exists public.cases (
   constraint cases_slug_not_blank_check check (length(btrim(slug)) > 0),
   constraint cases_title_not_blank_check check (length(btrim(title)) > 0),
   constraint cases_type_check check (type in ('bankruptcy', 'immigration', 'general')),
-  constraint cases_status_check check (
-    status in ('intake', 'investigation', 'review', 'drafting', 'filing', 'closed')
-  ),
   constraint cases_priority_check check (priority in ('low', 'normal', 'high', 'urgent')),
   constraint cases_user_slug_unique unique (user_id, slug)
 );
@@ -29,7 +25,6 @@ insert into public.cases (
   title,
   type,
   client_name,
-  status,
   priority,
   next_action,
   next_deadline_at
@@ -41,7 +36,6 @@ values
     'Acme v. Glade',
     'general',
     'Acme Holdings',
-    'review',
     'high',
     'Review draft settlement memo',
     now() + interval '2 days'
@@ -52,7 +46,6 @@ values
     'Rivera intake',
     'immigration',
     'Maria Rivera',
-    'intake',
     'normal',
     'Collect signed engagement letter',
     now() + interval '5 days'
@@ -63,7 +56,6 @@ values
     'Northstar review',
     'general',
     'Northstar LLC',
-    'investigation',
     'normal',
     'Summarize uploaded correspondence',
     null
@@ -74,7 +66,6 @@ values
     'Atlas filing',
     'bankruptcy',
     'Atlas Partners',
-    'filing',
     'urgent',
     'Prepare filing checklist',
     now() + interval '1 day'
@@ -84,7 +75,6 @@ set
   title = excluded.title,
   type = excluded.type,
   client_name = excluded.client_name,
-  status = excluded.status,
   priority = excluded.priority,
   next_action = excluded.next_action,
   next_deadline_at = excluded.next_deadline_at,

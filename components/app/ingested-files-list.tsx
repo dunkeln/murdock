@@ -30,7 +30,7 @@ export function IngestedFilesList({
   }
 
   return (
-    <section className="flex w-full max-w-md justify-self-end flex-col text-sm text-paper/70">
+    <section className="flex w-full max-w-full justify-self-end flex-col text-sm text-paper/70">
       <ol className="flex max-h-[13.5rem] flex-col gap-2 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {files.map((item) => {
           const isSelected = selectedFileId === item.id;
@@ -45,7 +45,7 @@ export function IngestedFilesList({
                 )}
               >
                 <Checkbox
-                  aria-label={`Select ${item.file.name}`}
+                  aria-label={`Select ${item.fileName}`}
                   checked={isChecked}
                   className="rounded-none border-transparent bg-transparent text-current data-checked:border-transparent data-checked:bg-transparent data-checked:text-current"
                   onCheckedChange={(checked) => {
@@ -57,7 +57,7 @@ export function IngestedFilesList({
                   }}
                 />
                 <Toggle
-                  aria-label={`Show ${item.file.name}`}
+                  aria-label={`Show ${item.fileName}`}
                   className={cn(
                     "h-auto max-w-full min-w-0 justify-start gap-2 overflow-hidden rounded-none border-0 bg-transparent p-0 text-paper hover:!bg-transparent hover:!text-paper aria-pressed:!bg-transparent has-data-[icon=inline-start]:pl-0",
                     isSelected && "text-ink hover:!bg-transparent hover:!text-ink"
@@ -67,16 +67,16 @@ export function IngestedFilesList({
                   }}
                   pressed={isSelected}
                 >
-                  {item.ocrStatus === "failed" ? (
+                  {item.ocrStatus === "failed" || item.shapingStatus === "failed" ? (
                     <AlertCircle data-icon="inline-start" />
                   ) : (
                     <FileText data-icon="inline-start" />
                   )}
-                  <span className="truncate">{item.file.name}</span>
+                  <span className="truncate">{item.fileName}</span>
                 </Toggle>
                 <div className="flex size-6 items-center justify-end overflow-hidden">
                   <Button
-                    aria-label={`Delete ${item.file.name}`}
+                    aria-label={`Delete ${item.fileName}`}
                     className={cn(
                       "size-6 rounded-none border-0 bg-transparent p-0 text-paper hover:!bg-transparent hover:!text-paper",
                       isSelected &&

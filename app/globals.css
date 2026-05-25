@@ -139,3 +139,14 @@
     display: none;
   }
 }
+
+@layer components {
+  [data-sonner-toast] {
+    @apply rounded-none border-paper/15 bg-ink text-paper shadow-none;
+    box-shadow: none !important;
+  }
+}
+
+@utility hover-theme-invert {
+  @apply hover:!bg-paper hover:!text-ink;
+}

@@ -14,7 +14,13 @@
 /coverage
 /test-results/
 /playwright-report/
+/blob-report/
+/.vitest/
 /.nyc_output/
+/screenshots/
+/videos/
+/downloads/
+/playwright/.cache/
 
 # next.js
 /.next/
@@ -28,14 +34,28 @@
 /.cache/
 /.turbo/
 /.parcel-cache/
+/.vite/
 /.eslintcache
 .npm/
 .pnpm-store/
 
 # misc
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
 *.pem
 *.local
+*.local.*
+
+# editor and IDE local state
+/.idea/
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/settings.json.example
+*.swp
+*.swo
 
 # generated logs and diagnostics
 logs/
@@ -66,11 +86,16 @@ yarn-error.log*
 next-env.d.ts
 
 # local databases and large binary artifacts
-/db/
-!/db/
-/db/*
+/db/data/
+/db/local/
+/db/tmp/
+/db/*.sqlite
+/db/*.sqlite3
+/db/*.db
+/db/*.dump
+/db/*.bak
 !/db/migrations/
-!/db/migrations/*.sql
+!/db/migrations/**
 /database/
 /data/
 /storage/
@@ -94,16 +119,32 @@ next-env.d.ts
 /exports/
 /artifacts/
 /examples/
+/fixtures/tmp/
+/.tmp/
 /tmp/
 /temp/
 
 # local agent navigation notes
 /index.md
+/APP.md
 /interview notes.markdown
+/*.notes.md
+/*.scratch.md
+/*.local.md
+/*-notes.md
+/*_notes.md
 
 # local agent state and memories
+/.codex/
+!/.codex/
 /.codex/memories/
 /.codex/sessions/
 /.codex/logs/
 /.agents/
 skills-lock.json
+
+# local tool and marketplace state
+/.claude/
+/.cursor/
+/.openclaw/
+/.lobehub-market/

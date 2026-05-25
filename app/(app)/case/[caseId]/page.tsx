@@ -1,5 +1,8 @@
-import { getCaseTypeLabel } from "@/lib/case-type";
-import { getCurrentUserCaseSummaryBySlug } from "@/lib/server/cases/service";
+import {
+  CaseWorkspaceErrorState,
+  CaseWorkspaceView,
+} from "@/components/app/case-workspace";
+import { getCurrentUserCaseWorkspaceBySlug } from "@/lib/server/case-workspace/service";
 
 type CaseDetailPageProps = {
   params: Promise<{
@@ -13,16 +16,16 @@ function formatCaseId(caseId: string) {
 
 export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
   const { caseId } = await params;
-  const caseSummary = await getCurrentUserCaseSummaryBySlug(caseId);
+  const result = await getCurrentUserCaseWorkspaceBySlug(caseId);
 
-  return (
-    <div className="flex flex-col gap-3">
-      <h1 className="font-heading text-4xl uppercase leading-none sm:text-5xl">
-        {caseSummary?.title ?? formatCaseId(caseId)}
-      </h1>
-      <p className="text-sm font-medium text-paper/60">
-        {caseSummary ? getCaseTypeLabel(caseSummary.type) : "General"}
-      </p>
-    </div>
-  );
+  if (!result.ok) {
+    return (
+      <CaseWorkspaceErrorState
+        error={result.error}
+        fallbackTitle={formatCaseId(caseId)}
+      />
+    );
+  }
+
+  return <CaseWorkspaceView workspace={result.workspace} />;
 }
