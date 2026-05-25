@@ -145,12 +145,7 @@ export function PdfViewer({ file }: PdfViewerProps) {
       setPageNumbers([]);
 
       try {
-        const pdfjs = await import("pdfjs-dist");
-
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/build/pdf.worker.min.mjs",
-          import.meta.url
-        ).toString();
+        const pdfjs = await import("pdfjs-dist/webpack.mjs");
 
         const pdf = await pdfjs.getDocument(pdfUrl).promise;
         const renderedPageNumbers = Array.from(
@@ -194,7 +189,7 @@ export function PdfViewer({ file }: PdfViewerProps) {
   return (
     <section
       aria-label={file?.name ?? "Selected PDF"}
-      className="min-h-0 w-full overflow-hidden border border-paper/15 md:w-[50vw] md:max-w-3xl"
+      className="h-full min-h-0 w-full max-w-full overflow-hidden border border-paper/15"
       data-pdf-viewer
     >
       <div

@@ -30,7 +30,7 @@ export function IngestedFilesList({
   }
 
   return (
-    <section className="flex w-full max-w-md justify-self-end flex-col text-sm text-paper/70">
+    <section className="flex w-full max-w-full justify-self-end flex-col text-sm text-paper/70">
       <ol className="flex max-h-[13.5rem] flex-col gap-2 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {files.map((item) => {
           const isSelected = selectedFileId === item.id;
@@ -67,7 +67,7 @@ export function IngestedFilesList({
                   }}
                   pressed={isSelected}
                 >
-                  {item.ocrStatus === "failed" ? (
+                  {item.ocrStatus === "failed" || item.shapingStatus === "failed" ? (
                     <AlertCircle data-icon="inline-start" />
                   ) : (
                     <FileText data-icon="inline-start" />

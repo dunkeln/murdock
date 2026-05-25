@@ -66,7 +66,16 @@ yarn-error.log*
 next-env.d.ts
 
 # local databases and large binary artifacts
-/db/*
+/db/data/
+/db/local/
+/db/tmp/
+/db/*.sqlite
+/db/*.sqlite3
+/db/*.db
+/db/*.dump
+/db/*.bak
+!/db/migrations/
+!/db/migrations/**
 /database/
 /data/
 /storage/
@@ -95,11 +104,25 @@ next-env.d.ts
 
 # local agent navigation notes
 /index.md
+/APP.md
 /interview notes.markdown
+/*.notes.md
+/*.scratch.md
+/*.local.md
+/*-notes.md
+/*_notes.md
 
 # local agent state and memories
+/.codex/
+!/.codex/
 /.codex/memories/
 /.codex/sessions/
 /.codex/logs/
 /.agents/
 skills-lock.json
+
+# local tool and marketplace state
+/.claude/
+/.cursor/
+/.openclaw/
+/.lobehub-market/

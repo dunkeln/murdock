@@ -24,7 +24,6 @@ export const caseTypeSchema = z.enum([
 export type CaseType = z.infer<typeof caseTypeSchema>;
 
 export const isoDateTimeSchema = z.iso.datetime({ offset: true });
-export const isoDateSchema = z.iso.date();
 
 export const caseSummaryDtoSchema = z.object({
   id: z.uuid(),
@@ -40,81 +39,6 @@ export const caseSummaryDtoSchema = z.object({
 });
 
 export type CaseSummaryDto = z.infer<typeof caseSummaryDtoSchema>;
-
-export const caseParticipantRoleSchema = z.enum([
-  "client",
-  "attorney",
-  "paralegal",
-  "opposing_counsel",
-  "court",
-  "other",
-]);
-
-export type CaseParticipantRole = z.infer<typeof caseParticipantRoleSchema>;
-
-export const caseParticipantDtoSchema = z.object({
-  id: z.uuid(),
-  role: caseParticipantRoleSchema,
-  displayName: z.string().min(1),
-  organizationName: z.string().min(1).nullable(),
-  email: z.email().nullable(),
-  phone: z.string().min(1).nullable(),
-});
-
-export type CaseParticipantDto = z.infer<typeof caseParticipantDtoSchema>;
-
-export const caseDeadlineStatusSchema = z.enum([
-  "pending",
-  "blocked",
-  "completed",
-  "missed",
-]);
-
-export type CaseDeadlineStatus = z.infer<typeof caseDeadlineStatusSchema>;
-
-export const caseDeadlineDtoSchema = z.object({
-  id: z.uuid(),
-  title: z.string().min(1),
-  dueAt: isoDateTimeSchema,
-  status: caseDeadlineStatusSchema,
-  source: z.string().min(1).nullable(),
-});
-
-export type CaseDeadlineDto = z.infer<typeof caseDeadlineDtoSchema>;
-
-export const caseTimelineEventKindSchema = z.enum([
-  "intake",
-  "document_uploaded",
-  "ocr_completed",
-  "deadline_added",
-  "note_added",
-  "status_changed",
-]);
-
-export type CaseTimelineEventKind = z.infer<typeof caseTimelineEventKindSchema>;
-
-export const caseTimelineEventDtoSchema = z.object({
-  id: z.uuid(),
-  kind: caseTimelineEventKindSchema,
-  title: z.string().min(1),
-  description: z.string().min(1).nullable(),
-  occurredAt: isoDateTimeSchema,
-  actorDisplayName: z.string().min(1).nullable(),
-});
-
-export type CaseTimelineEventDto = z.infer<typeof caseTimelineEventDtoSchema>;
-
-export const caseDetailDtoSchema = caseSummaryDtoSchema.extend({
-  matterNumber: z.string().min(1).nullable(),
-  courtName: z.string().min(1).nullable(),
-  practiceArea: z.string().min(1).nullable(),
-  openedAt: isoDateSchema.nullable(),
-  participants: z.array(caseParticipantDtoSchema),
-  deadlines: z.array(caseDeadlineDtoSchema),
-  timeline: z.array(caseTimelineEventDtoSchema),
-});
-
-export type CaseDetailDto = z.infer<typeof caseDetailDtoSchema>;
 
 export const createCaseInputSchema = z.object({
   title: z.string().min(1),

@@ -84,6 +84,40 @@ export async function getActiveOcrConversion(input: {
   return row ? toOcrConversionDto(row) : null;
 }
 
+export async function getOcrConversionsByFirmAndIds(input: {
+  conversionIds: string[];
+  firmId: string;
+}): Promise<OcrConversionDto[]> {
+  if (input.conversionIds.length === 0) {
+    return [];
+  }
+
+  const sql = createNeonSql();
+  const rows = await sql`
+    select
+      id,
+      firm_id,
+      document_sha256,
+      provider,
+      provider_model,
+      status,
+      markdown,
+      pages_processed,
+      error_message,
+      expires_at,
+      deleted_at,
+      created_at,
+      updated_at
+    from public.ocr_conversions
+    where firm_id = ${input.firmId}
+      and id = any(${input.conversionIds})
+      and deleted_at is null
+    order by created_at asc, id asc
+  `;
+
+  return (rows as OcrConversionRow[]).map(toOcrConversionDto);
+}
+
 export async function insertProcessingOcrConversion(input: {
   documentSha256: string;
   firmId: string;

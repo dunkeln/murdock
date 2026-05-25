@@ -12,6 +12,24 @@ export type DocumentIngestionError = z.infer<typeof documentIngestionErrorSchema
 export const mistralOcrPageSchema = z.object({
   index: z.number().int().nonnegative(),
   markdown: z.string(),
+  dimensions: z
+    .object({
+      dpi: z.number().int().positive().nullable(),
+      height: z.number().int().positive().nullable(),
+      width: z.number().int().positive().nullable(),
+    })
+    .nullable(),
+  images: z.array(
+    z.object({
+      id: z.string().min(1),
+      topLeftX: z.number().nullable(),
+      topLeftY: z.number().nullable(),
+      bottomRightX: z.number().nullable(),
+      bottomRightY: z.number().nullable(),
+      imageBase64: z.string().min(1).nullable(),
+      imageAnnotation: z.string().min(1).nullable(),
+    }),
+  ),
 });
 
 export type MistralOcrPage = z.infer<typeof mistralOcrPageSchema>;

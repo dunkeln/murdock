@@ -2,9 +2,8 @@ import "server-only";
 
 import {
   type SelectModelInput,
-  type SelectModelResult,
+  type ModelRouteMode,
   type SelectModelRoutesResult,
-  selectModelFromConfig,
   selectModelRoutesFromConfig,
 } from "@/lib/ai";
 
@@ -21,14 +20,9 @@ const providers = [
   },
 ];
 
-export function selectModel(
-  input: SelectModelInput = {},
-): SelectModelResult {
-  return selectModelFromConfig(input, providers);
-}
-
 export function selectModelRoutes(
   input: SelectModelInput = {},
+  mode: ModelRouteMode = "fallback",
 ): SelectModelRoutesResult {
-  return selectModelRoutesFromConfig(input, providers);
+  return selectModelRoutesFromConfig(input, providers, mode);
 }

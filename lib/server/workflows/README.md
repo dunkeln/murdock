@@ -2,11 +2,14 @@
 
 Server-side workflow code belongs in this folder.
 
-Keep the boundary narrow:
+Rules:
 
-- `canonical.ts` owns provider-independent workflow validation and summaries.
-- Workflow-specific modules should transform source documents, OCR conversions, and case context into `lib/contracts/legal-workflows.ts` DTOs.
-- Provider calls stay in `lib/server/adapters/*`; workflow modules consume typed adapter results only.
-- Persistence should land in repositories when a workflow surface becomes real in the UI.
+- Workflows consume typed OCR, harness, case, and workspace contracts.
+- Model calls stay below `lib/server/ai/`.
+- External SDKs stay below `lib/server/adapters/`.
+- Persistence lands in repositories.
+- UI-facing workflow state must be source-grounded and schema-validated.
 
-The canonical model is intentionally not tied to bankruptcy, immigration, or general matters. Workflow-specific fields should use typed facts, document purposes, citations, tasks, and review decisions rather than adding one-off top-level DTO fields.
+The active OCR-to-controls workflow projects `harness.v1` bundles into existing
+case workspace tables. Facts, timelines, issues, and controls are projections,
+not separate model-owned engines.

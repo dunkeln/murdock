@@ -1,9 +1,10 @@
 import "server-only";
 
-import type { CaseSummaryDto } from "@/lib/contracts/cases";
+import type { CaseSummaryDto, CreateCaseInput } from "@/lib/contracts/cases";
 import { getCurrentUser } from "@/lib/server/auth/current-user";
 import {
-  getCaseSummaryByUserAndSlug,
+  createCaseByUser,
+  deleteCaseByUser,
   listCaseSummariesByUser,
   updateCaseTitleByUser,
 } from "@/lib/server/cases/repository";
@@ -17,14 +18,25 @@ export async function listCurrentUserCaseSummaries(): Promise<CaseSummaryDto[]> 
   });
 }
 
-export async function getCurrentUserCaseSummaryBySlug(
-  slug: string
+export async function createCurrentUserCase(
+  data: CreateCaseInput
+): Promise<CaseSummaryDto> {
+  const user = await getCurrentUser();
+
+  return createCaseByUser({
+    userId: user.id,
+    data,
+  });
+}
+
+export async function deleteCurrentUserCase(
+  caseId: string
 ): Promise<CaseSummaryDto | null> {
   const user = await getCurrentUser();
 
-  return getCaseSummaryByUserAndSlug({
+  return deleteCaseByUser({
+    caseId,
     userId: user.id,
-    slug,
   });
 }
 

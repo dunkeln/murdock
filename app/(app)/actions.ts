@@ -3,13 +3,37 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { updateCurrentUserCaseTitle } from "@/lib/server/cases/service";
+import {
+  createCurrentUserCase,
+  deleteCurrentUserCase,
+  updateCurrentUserCaseTitle,
+} from "@/lib/server/cases/service";
 import { ensureCurrentFirmMistralOcrConversion } from "@/lib/server/documents/ocr-conversions-service";
 import { withLangfuseObservation } from "@/lib/server/telemetry/langfuse";
+import {
+  shapeCurrentUserWorkspaceFromOcr,
+  shapeWorkspaceErrorSchema,
+} from "@/lib/server/workflows/workspace-shaping";
 
 const updateCaseTitleActionInputSchema = z.object({
   caseId: z.uuid(),
   title: z.string().trim().min(1).max(120),
+});
+
+const deleteCaseActionInputSchema = z.object({
+  caseId: z.uuid(),
+});
+
+const shapeWorkspaceFromOcrActionInputSchema = z.object({
+  caseId: z.uuid(),
+  files: z
+    .array(
+      z.object({
+        fileName: z.string().min(1),
+        ocrConversionId: z.uuid(),
+      }),
+    )
+    .min(1),
 });
 
 const MAX_OCR_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -22,6 +46,29 @@ export type UpdateCaseTitleActionResult =
   | {
       ok: false;
       message: string;
+    };
+
+export type CreateCaseActionResult =
+  | {
+      caseId: string;
+      ok: true;
+      slug: string;
+      title: string;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+export type DeleteCaseActionResult =
+  | {
+      ok: true;
+      slug: string;
+      title: string;
+    }
+  | {
+      message: string;
+      ok: false;
     };
 
 export type IngestDocumentOcrActionResult =
@@ -37,6 +84,39 @@ export type IngestDocumentOcrActionResult =
   | {
       message: string;
       ok: false;
+    };
+
+export type ShapeWorkspaceFromOcrActionResult =
+  | {
+      caseId: string;
+      events: unknown[];
+      ok: true;
+      runId: string;
+      status:
+        | "idle"
+        | "ocr_processing"
+        | "shaping_pending"
+        | "shaping_started"
+        | "ready"
+        | "needs_review"
+        | "failed";
+    }
+  | {
+      caseId: string | null;
+      errorCategory:
+        | "configuration"
+        | "not_found"
+        | "ocr_not_ready"
+        | "provider"
+        | "schema_validation"
+        | "database"
+        | "unknown";
+      events: unknown[];
+      isRetryable: boolean;
+      message: string;
+      ok: false;
+      runId: string | null;
+      status: "failed";
     };
 
 function getOcrUploadFile(formData: FormData): File | null {
@@ -86,6 +166,89 @@ export async function updateCaseTitleAction(
       return {
         ok: true,
         title: updatedCase.title,
+      };
+    }
+  );
+}
+
+export async function createCaseAction(): Promise<CreateCaseActionResult> {
+  return withLangfuseObservation(
+    {
+      name: "server-action.create-case",
+      output: (result) => ({
+        ok: result.ok,
+      }),
+    },
+    async () => {
+      try {
+        const createdCase = await createCurrentUserCase({
+          title: "Untitled case",
+          type: "general",
+        });
+
+        revalidatePath("/dashboard");
+        revalidatePath("/case");
+        revalidatePath(`/case/${createdCase.slug}`);
+
+        return {
+          caseId: createdCase.id,
+          ok: true,
+          slug: createdCase.slug,
+          title: createdCase.title,
+        };
+      } catch (error) {
+        return {
+          message:
+            error instanceof Error ? error.message : "Case could not be created.",
+          ok: false,
+        };
+      }
+    }
+  );
+}
+
+export async function deleteCaseAction(
+  formData: FormData
+): Promise<DeleteCaseActionResult> {
+  return withLangfuseObservation(
+    {
+      name: "server-action.delete-case",
+      input: {
+        caseId: formData.get("caseId"),
+      },
+      output: (result) => ({
+        ok: result.ok,
+      }),
+    },
+    async () => {
+      const parsedInput = deleteCaseActionInputSchema.safeParse({
+        caseId: formData.get("caseId"),
+      });
+
+      if (!parsedInput.success) {
+        return {
+          message: "Case id is invalid.",
+          ok: false,
+        };
+      }
+
+      const deletedCase = await deleteCurrentUserCase(parsedInput.data.caseId);
+
+      if (!deletedCase) {
+        return {
+          message: "Case not found.",
+          ok: false,
+        };
+      }
+
+      revalidatePath("/dashboard");
+      revalidatePath("/case");
+      revalidatePath(`/case/${deletedCase.slug}`);
+
+      return {
+        ok: true,
+        slug: deletedCase.slug,
+        title: deletedCase.title,
       };
     }
   );
@@ -145,5 +308,84 @@ export async function ingestDocumentOcrAction(
         };
       }
     }
+  );
+}
+
+export async function shapeWorkspaceFromOcrAction(
+  formData: FormData,
+): Promise<ShapeWorkspaceFromOcrActionResult> {
+  return withLangfuseObservation(
+    {
+      name: "server-action.shape-workspace-from-ocr",
+      input: {
+        caseId: formData.get("caseId"),
+      },
+      output: (result) => ({
+        ok: result.ok,
+        status: result.status,
+        eventCount: result.events.length,
+        errorCategory: result.ok ? null : result.errorCategory,
+      }),
+    },
+    async () => {
+      const rawFiles = formData.getAll("files").map((value) => {
+        if (typeof value !== "string") {
+          return null;
+        }
+
+        try {
+          return JSON.parse(value) as unknown;
+        } catch {
+          return null;
+        }
+      });
+      const parsedInput = shapeWorkspaceFromOcrActionInputSchema.safeParse({
+        caseId: formData.get("caseId"),
+        files: rawFiles,
+      });
+
+      if (!parsedInput.success) {
+        return {
+          ok: false,
+          caseId:
+            typeof formData.get("caseId") === "string"
+              ? String(formData.get("caseId"))
+              : null,
+          errorCategory: "schema_validation",
+          events: [],
+          isRetryable: false,
+          message: "Workspace shaping requires a case and ready OCR files.",
+          runId: null,
+          status: "failed",
+        };
+      }
+
+      const result = await shapeCurrentUserWorkspaceFromOcr(parsedInput.data);
+
+      if (!result.ok) {
+        const error = shapeWorkspaceErrorSchema.parse(result.error);
+
+        return {
+          ok: false,
+          caseId: result.caseId,
+          errorCategory: error.errorCategory,
+          events: result.events,
+          isRetryable: error.isRetryable,
+          message: error.message,
+          runId: result.runId,
+          status: "failed",
+        };
+      }
+
+      revalidatePath(`/case/${parsedInput.data.caseId}`);
+
+      return {
+        ok: true,
+        caseId: result.caseId,
+        events: result.events,
+        runId: result.runId,
+        status: result.status,
+      };
+    },
   );
 }

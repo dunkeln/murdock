@@ -6,21 +6,33 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plane,
+  Plus,
+  Trash2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import type { DropEvent } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 
 import {
+  createCaseAction,
+  deleteCaseAction,
   ingestDocumentOcrAction,
+  shapeWorkspaceFromOcrAction,
   updateCaseTitleAction,
 } from "@/app/(app)/actions";
 import type { IngestedFileItem } from "@/components/app/ingested-file-types";
+import { IngestedFilesProvider } from "@/components/app/ingested-files-context";
 import { IngestedFilesList } from "@/components/app/ingested-files-list";
-import { PdfViewer } from "@/components/app/pdf-viewer";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import type { CaseSummaryDto, CaseType } from "@/lib/contracts/cases";
 import { cn } from "@/lib/utils";
 
@@ -59,11 +71,27 @@ const caseTypeIcons = {
 
 const MAX_CONCURRENT_OCR_UPLOADS = 3;
 
-type EditableCaseLinkProps = {
-  caseItem: CaseSummaryDto;
+function getFileKey(file: File) {
+  return [file.name, file.size, file.lastModified, file.type].join(":");
+}
+
+type ReadyOcrFile = {
+  fileName: string;
+  itemId: string;
+  ocrConversionId: string;
 };
 
-function EditableCaseLink({ caseItem }: EditableCaseLinkProps) {
+type EditableCaseLinkProps = {
+  caseItem: CaseSummaryDto;
+  isDeleting: boolean;
+  onDeleteCase: (caseItem: CaseSummaryDto) => void;
+};
+
+function EditableCaseLink({
+  caseItem,
+  isDeleting,
+  onDeleteCase,
+}: EditableCaseLinkProps) {
   const router = useRouter();
   const [isEditing, setIsEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(caseItem.title);
@@ -175,7 +203,7 @@ function EditableCaseLink({ caseItem }: EditableCaseLinkProps) {
     );
   }
 
-  return (
+  const caseButton = (
     <button
       className="flex items-center justify-between gap-3 border border-paper/15 px-3 py-2 text-left text-paper transition-colors hover:bg-paper hover:text-ink"
       onClick={navigateToCase}
@@ -189,10 +217,35 @@ function EditableCaseLink({ caseItem }: EditableCaseLinkProps) {
       />
     </button>
   );
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{caseButton}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-28 rounded-none border border-paper/15 bg-ink p-1 text-paper shadow-none ring-0">
+        <ContextMenuGroup>
+          <ContextMenuItem
+            className="rounded-none text-paper focus:bg-paper focus:text-ink data-[variant=destructive]:text-paper data-[variant=destructive]:focus:bg-paper data-[variant=destructive]:focus:text-ink"
+            disabled={isDeleting}
+            onSelect={() => onDeleteCase(caseItem)}
+            variant="destructive"
+          >
+            <Trash2 data-icon="inline-start" />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuGroup>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 export function AppFrame({ cases, children }: AppFrameProps) {
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isCreatingCase, startCreateCaseTransition] = React.useTransition();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
+  const [deletingCaseId, setDeletingCaseId] = React.useState<string | null>(
+    null
+  );
   const [ingestedFiles, setIngestedFiles] = React.useState<IngestedFileItem[]>(
     []
   );
@@ -200,11 +253,27 @@ export function AppFrame({ cases, children }: AppFrameProps) {
     null
   );
   const [checkedFileIds, setCheckedFileIds] = React.useState<string[]>([]);
+  const checkedFileIdsRef = React.useRef<string[]>([]);
   const selectedFile = React.useMemo(
     () =>
       ingestedFiles.find((item) => item.id === selectedFileId)?.file ?? null,
     [ingestedFiles, selectedFileId]
   );
+  const activeCase = React.useMemo(() => {
+    const segments = pathname.split("/").filter(Boolean);
+    const caseSlug = segments[0] === "case" ? segments[1] : null;
+
+    return cases.find((caseItem) => caseItem.slug === caseSlug) ?? null;
+  }, [cases, pathname]);
+
+  React.useEffect(() => {
+    checkedFileIdsRef.current = checkedFileIds;
+  }, [checkedFileIds]);
+
+  const changeCheckedFileIds = React.useCallback((fileIds: string[]) => {
+    checkedFileIdsRef.current = fileIds;
+    setCheckedFileIds(fileIds);
+  }, []);
 
   const updateIngestedFile = React.useCallback(
     (fileId: string, patch: Partial<IngestedFileItem>) => {
@@ -222,8 +291,89 @@ export function AppFrame({ cases, children }: AppFrameProps) {
     []
   );
 
+  const shapeReadyFiles = React.useCallback(
+    async (readyFiles: ReadyOcrFile[]) => {
+      if (!activeCase || readyFiles.length === 0) {
+        return;
+      }
+
+      const checkedIds = new Set(checkedFileIdsRef.current);
+      const filesToShape = readyFiles.filter((file) => checkedIds.has(file.itemId));
+
+      if (filesToShape.length === 0) {
+        return;
+      }
+
+      for (const file of filesToShape) {
+        updateIngestedFile(file.itemId, {
+          shapingStatus: "shaping_started",
+        });
+      }
+
+      const toastId = `shape-${crypto.randomUUID()}`;
+      const description =
+        filesToShape.length === 1
+          ? filesToShape[0]!.fileName
+          : `${filesToShape.length} checked files`;
+
+      toast.loading("Shaping workspace controls", {
+        description,
+        id: toastId,
+      });
+
+      const shapeFormData = new FormData();
+      shapeFormData.set("caseId", activeCase.id);
+
+      for (const file of filesToShape) {
+        shapeFormData.append(
+          "files",
+          JSON.stringify({
+            fileName: file.fileName,
+            ocrConversionId: file.ocrConversionId,
+          })
+        );
+      }
+
+      const shapeResult = await shapeWorkspaceFromOcrAction(shapeFormData);
+
+      if (!shapeResult.ok) {
+        for (const file of filesToShape) {
+          updateIngestedFile(file.itemId, {
+            shapingErrorMessage: shapeResult.message,
+            shapingRunId: shapeResult.runId ?? undefined,
+            shapingStatus: "failed",
+          });
+        }
+        toast.error("Workspace controls need review", {
+          description: shapeResult.message,
+          id: toastId,
+        });
+        return;
+      }
+
+      for (const file of filesToShape) {
+        updateIngestedFile(file.itemId, {
+          shapingRunId: shapeResult.runId,
+          shapingStatus:
+            shapeResult.status === "needs_review" ? "needs_review" : "ready",
+        });
+      }
+      toast.success(
+        shapeResult.status === "needs_review"
+          ? "Workspace controls need review"
+          : "Workspace controls ready",
+        {
+          description,
+          id: toastId,
+        }
+      );
+      router.refresh();
+    },
+    [activeCase, router, updateIngestedFile]
+  );
+
   const processDroppedFile = React.useCallback(
-    async (item: IngestedFileItem) => {
+    async (item: IngestedFileItem): Promise<ReadyOcrFile | null> => {
       const toastId = `ocr-${item.id}`;
 
       toast.loading("OCR processing", {
@@ -245,7 +395,7 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           description: result.message,
           id: toastId,
         });
-        return;
+        return null;
       }
 
       let ocrStatus: IngestedFileItem["ocrStatus"] = "processing";
@@ -270,7 +420,7 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           description: result.errorMessage ?? item.file.name,
           id: toastId,
         });
-        return;
+        return null;
       }
 
       updateIngestedFile(item.id, {
@@ -286,21 +436,24 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           description: item.file.name,
           id: toastId,
         });
-        return;
-      }
-
-      if (ocrStatus === "ready") {
+      } else if (ocrStatus === "ready") {
         toast.success("OCR ready", {
           description: item.file.name,
           id: toastId,
         });
-        return;
+      } else {
+        toast.loading("OCR already processing", {
+          description: item.file.name,
+          id: toastId,
+        });
+        return null;
       }
 
-      toast.loading("OCR already processing", {
-        description: item.file.name,
-        id: toastId,
-      });
+      return {
+        fileName: item.file.name,
+        itemId: item.id,
+        ocrConversionId: result.conversionId,
+      };
     },
     [updateIngestedFile]
   );
@@ -308,6 +461,7 @@ export function AppFrame({ cases, children }: AppFrameProps) {
   const processDroppedFiles = React.useCallback(
     async (fileItems: IngestedFileItem[]) => {
       const pendingFileItems = [...fileItems];
+      const readyFiles: ReadyOcrFile[] = [];
       const workers = Array.from(
         {
           length: Math.min(MAX_CONCURRENT_OCR_UPLOADS, pendingFileItems.length),
@@ -316,15 +470,20 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           let item = pendingFileItems.shift();
 
           while (item) {
-            await processDroppedFile(item);
+            const readyFile = await processDroppedFile(item);
+
+            if (readyFile) {
+              readyFiles.push(readyFile);
+            }
             item = pendingFileItems.shift();
           }
         }
       );
 
       await Promise.all(workers);
+      await shapeReadyFiles(readyFiles);
     },
-    [processDroppedFile]
+    [processDroppedFile, shapeReadyFiles]
   );
 
   const onDrop = React.useCallback(
@@ -333,22 +492,55 @@ export function AppFrame({ cases, children }: AppFrameProps) {
         return;
       }
 
-      const acceptedFileItems = acceptedFiles.map((file) => ({
+      const existingFileKeys = new Set(ingestedFiles.map((item) => getFileKey(item.file)));
+      const uniqueFiles = acceptedFiles.filter((file) => {
+        const fileKey = getFileKey(file);
+
+        if (existingFileKeys.has(fileKey)) {
+          return false;
+        }
+
+        existingFileKeys.add(fileKey);
+        return true;
+      });
+
+      if (uniqueFiles.length === 0) {
+        toast("File already added", {
+          description: acceptedFiles[0]?.name,
+        });
+        return;
+      }
+
+      const acceptedFileItems = uniqueFiles.map((file) => ({
         file,
         id: crypto.randomUUID(),
         ocrStatus: "processing" as const,
+        shapingStatus: activeCase ? ("shaping_pending" as const) : undefined,
       }));
+      const acceptedFileIds = acceptedFileItems.map((item) => item.id);
 
       setIngestedFiles((currentFiles) => [
         ...acceptedFileItems,
         ...currentFiles,
       ]);
+      setCheckedFileIds((currentIds) => {
+        const nextIds = Array.from(new Set([...currentIds, ...acceptedFileIds]));
+
+        checkedFileIdsRef.current = nextIds;
+        return nextIds;
+      });
       setSelectedFileId(
         (currentFileId) => currentFileId ?? acceptedFileItems[0].id
       );
+      if (uniqueFiles.length < acceptedFiles.length) {
+        toast("Duplicate file skipped", {
+          description: acceptedFiles[0]?.name,
+        });
+      }
+
       void processDroppedFiles(acceptedFileItems);
     },
-    [processDroppedFiles]
+    [activeCase, ingestedFiles, processDroppedFiles]
   );
   const { getInputProps, getRootProps, isDragActive } = useDropzone({
     getFilesFromEvent: getDroppedFilesFromEvent,
@@ -356,29 +548,124 @@ export function AppFrame({ cases, children }: AppFrameProps) {
     onDrop,
   });
 
+  const deleteIngestedFile = React.useCallback(
+    (fileId: string) => {
+      const deletedFile = ingestedFiles.find((item) => item.id === fileId)?.file;
+
+      setIngestedFiles((currentFiles) =>
+        currentFiles.filter((currentFile) => currentFile.id !== fileId)
+      );
+      setCheckedFileIds((currentIds) => {
+        const nextIds = currentIds.filter((id) => id !== fileId);
+
+        checkedFileIdsRef.current = nextIds;
+        return nextIds;
+      });
+      setSelectedFileId((currentId) => (currentId === fileId ? null : currentId));
+      toast("File removed", {
+        description: deletedFile?.name,
+      });
+    },
+    [ingestedFiles]
+  );
+  const ingestedFilesContextValue = React.useMemo(
+    () => ({
+      checkedFileIds,
+      files: ingestedFiles,
+      onCheckedFileIdsChange: changeCheckedFileIds,
+      onDeleteFile: deleteIngestedFile,
+      onSelectFile: setSelectedFileId,
+      selectedFile,
+      selectedFileId,
+    }),
+    [
+      checkedFileIds,
+      changeCheckedFileIds,
+      deleteIngestedFile,
+      ingestedFiles,
+      selectedFile,
+      selectedFileId,
+    ]
+  );
+
+  function createCase() {
+    startCreateCaseTransition(async () => {
+      const result = await createCaseAction();
+
+      if (!result.ok) {
+        toast.error("Case could not be created", {
+          description: result.message,
+        });
+        return;
+      }
+
+      toast.success("Case created", {
+        description: result.title,
+      });
+      router.refresh();
+      router.push(`/case/${result.slug}`);
+    });
+  }
+
+  function deleteCase(caseItem: CaseSummaryDto) {
+    setDeletingCaseId(caseItem.id);
+
+    const formData = new FormData();
+    formData.set("caseId", caseItem.id);
+
+    startCreateCaseTransition(async () => {
+      const result = await deleteCaseAction(formData);
+
+      setDeletingCaseId(null);
+
+      if (!result.ok) {
+        toast.error("Case could not be deleted", {
+          description: result.message,
+        });
+        return;
+      }
+
+      toast.success("Case deleted", {
+        description: result.title,
+      });
+      router.refresh();
+
+      if (activeCase?.id === caseItem.id) {
+        router.push("/dashboard");
+      }
+    });
+  }
+
   return (
     <div
       className={cn(
-        "grid h-full w-full gap-0 overflow-hidden pl-6 transition-[grid-template-columns] lg:pl-8",
-        isCollapsed ? "md:grid-cols-[4.5rem_1fr]" : "md:grid-cols-[18rem_1fr]"
+        "grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden pl-6 md:grid-rows-[minmax(0,1fr)] lg:pl-8",
+        isSidebarCollapsed
+          ? "md:grid-cols-[4rem_1fr]"
+          : "md:grid-cols-[18rem_1fr]"
       )}
     >
-      <aside className="flex max-w-72 flex-col gap-8 overflow-hidden border-paper/15 py-8 text-sm text-paper/70 md:h-full md:border-r md:pr-8">
-        <div className="flex items-start justify-between gap-3">
-          <div className={cn("flex flex-col gap-3", isCollapsed && "md:hidden")}>
-            <p className="font-heading text-3xl uppercase leading-none text-paper">
+      <aside
+        className={cn(
+          "flex flex-col gap-8 overflow-hidden border-paper/15 py-8 text-sm text-paper/70 md:h-full md:border-r",
+          isSidebarCollapsed ? "max-w-16 pr-4" : "max-w-72 md:pr-8"
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          {!isSidebarCollapsed ? (
+            <p className="font-heading text-2xl uppercase leading-none text-paper">
               Cases
             </p>
-          </div>
+          ) : null}
           <Button
-            aria-label={isCollapsed ? "Expand side panel" : "Collapse side panel"}
-            className="rounded-none border border-paper/15 bg-ink text-paper hover:bg-paper hover:text-ink"
-            onClick={() => setIsCollapsed((current) => !current)}
+            aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="rounded-none border-paper/15 bg-ink text-paper hover:bg-paper hover:text-ink"
+            onClick={() => setIsSidebarCollapsed((current) => !current)}
             size="icon-sm"
             type="button"
             variant="ghost"
           >
-            {isCollapsed ? (
+            {isSidebarCollapsed ? (
               <PanelLeftOpen data-icon="inline-start" />
             ) : (
               <PanelLeftClose data-icon="inline-start" />
@@ -386,14 +673,31 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           </Button>
         </div>
 
-        <section className={cn("flex flex-col gap-3", isCollapsed && "md:hidden")}>
+        <section
+          className={cn("flex flex-col gap-3", isSidebarCollapsed && "hidden")}
+        >
+          <Button
+            className="w-full justify-start rounded-none border border-paper bg-paper text-ink hover:bg-paper/90 hover:text-ink"
+            disabled={isCreatingCase}
+            onClick={createCase}
+            type="button"
+            variant="ghost"
+          >
+            <Plus data-icon="inline-start" />
+            Add case
+          </Button>
           <nav
             aria-label="Cases"
             className="flex max-h-[calc(100vh-13rem)] flex-col gap-2 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {cases.length > 0 ? (
               cases.map((caseItem) => (
-                <EditableCaseLink caseItem={caseItem} key={caseItem.id} />
+                <EditableCaseLink
+                  caseItem={caseItem}
+                  isDeleting={deletingCaseId === caseItem.id}
+                  key={caseItem.id}
+                  onDeleteCase={deleteCase}
+                />
               ))
             ) : (
               <p className="border border-paper/15 px-3 py-2 text-paper/55">
@@ -426,51 +730,27 @@ export function AppFrame({ cases, children }: AppFrameProps) {
           </div>
         ) : null}
 
-        <div
-          className={cn(
-            "grid h-full min-h-0 gap-6 overflow-hidden px-8 py-8",
-            selectedFile
-              ? "grid-rows-[auto_minmax(0,1fr)]"
-              : "grid-rows-[minmax(0,1fr)]"
-          )}
-        >
-          <div
-            className={cn(
-              "grid h-full min-h-0 grid-cols-1 gap-6",
-              ingestedFiles.length > 0 &&
-                "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]"
-            )}
-          >
-            <div className="min-h-0 min-w-0">{children}</div>
-            <IngestedFilesList
-              checkedFileIds={checkedFileIds}
-              files={ingestedFiles}
-              onCheckedFileIdsChange={setCheckedFileIds}
-              onDeleteFile={(fileId) => {
-                const deletedFile = ingestedFiles.find(
-                  (item) => item.id === fileId
-                )?.file;
-
-                setIngestedFiles((currentFiles) =>
-                  currentFiles.filter((currentFile) => currentFile.id !== fileId)
-                );
-                setCheckedFileIds((currentIds) =>
-                  currentIds.filter((id) => id !== fileId)
-                );
-                setSelectedFileId((currentId) =>
-                  currentId === fileId ? null : currentId
-                );
-                toast("File removed", {
-                  description: deletedFile?.name,
-                });
-              }}
-              onSelectFile={setSelectedFileId}
-              selectedFileId={selectedFileId}
-            />
+        <IngestedFilesProvider value={ingestedFilesContextValue}>
+          <div className="grid h-full min-h-0 gap-6 overflow-hidden px-8 py-8">
+            <div
+              className={cn(
+                "grid h-full min-h-0 grid-cols-1 gap-6 overflow-hidden",
+                ingestedFiles.length > 0 &&
+                  "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]"
+              )}
+            >
+              <div className="min-h-0 min-w-0">{children}</div>
+              <IngestedFilesList
+                checkedFileIds={checkedFileIds}
+                files={ingestedFiles}
+                onCheckedFileIdsChange={changeCheckedFileIds}
+                onDeleteFile={deleteIngestedFile}
+                onSelectFile={setSelectedFileId}
+                selectedFileId={selectedFileId}
+              />
+            </div>
           </div>
-
-          <PdfViewer file={selectedFile} />
-        </div>
+        </IngestedFilesProvider>
       </div>
     </div>
   );

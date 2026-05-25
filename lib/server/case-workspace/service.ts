@@ -7,7 +7,10 @@ import {
   caseWorkspaceServiceErrorSchema,
 } from "@/lib/contracts/case-workspace";
 import { getCurrentUser } from "@/lib/server/auth/current-user";
-import { getCaseSummaryByUserAndSlug } from "@/lib/server/cases/repository";
+import {
+  getCaseSummaryByUserAndId,
+  getCaseSummaryByUserAndSlug,
+} from "@/lib/server/cases/repository";
 import { toCaseWorkspaceServiceError } from "@/lib/server/case-workspace/errors";
 import { getCaseWorkspaceRecordsByCaseId } from "@/lib/server/case-workspace/repository";
 import {
@@ -79,6 +82,37 @@ export async function getCurrentUserCaseWorkspaceBySlug(
       }
     }
   );
+}
+
+export async function getCurrentUserCaseWorkspaceById(
+  caseId: string,
+): Promise<GetCurrentUserCaseWorkspaceResult> {
+  try {
+    const user = await getCurrentUser();
+    const caseSummary = await getCaseSummaryByUserAndId({
+      caseId,
+      userId: user.id,
+    });
+
+    if (!caseSummary) {
+      return {
+        ok: false,
+        error: caseWorkspaceServiceErrorSchema.parse({
+          isError: true,
+          errorCategory: "not_found",
+          isRetryable: false,
+          message: "Case not found.",
+        }),
+      };
+    }
+
+    return getCurrentUserCaseWorkspaceBySlug(caseSummary.slug);
+  } catch (error) {
+    return {
+      ok: false,
+      error: toCaseWorkspaceServiceError(error),
+    };
+  }
 }
 
 async function loadCaseWorkspaceForUser(input: {

@@ -219,23 +219,115 @@ export const caseWorkspaceDtoSchema = z.object({
 
 export type CaseWorkspaceDto = z.infer<typeof caseWorkspaceDtoSchema>;
 
-export const caseWorkspaceAnalysisRequestSchema = z.object({
-  caseId: z.uuid(),
-  sourceDocumentIds: z.array(z.uuid()).min(1),
-  requestedAt: isoDateTimeSchema,
+export const caseWorkspaceShapeSourceSpanSchema = z.object({
+  sourceDocumentKey: z.string().min(1),
+  spanKey: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  pageIndex: z.number().int().nonnegative().nullable(),
+  pageLabel: z.string().min(1).nullable(),
+  fieldPath: z.string().min(1).nullable(),
+  verbatimExcerpt: z.string().min(1),
+  confidence: z.number().min(0).max(1).nullable(),
 });
 
-export type CaseWorkspaceAnalysisRequest = z.infer<
-  typeof caseWorkspaceAnalysisRequestSchema
+export type CaseWorkspaceShapeSourceSpan = z.infer<
+  typeof caseWorkspaceShapeSourceSpanSchema
 >;
 
-export const caseWorkspaceAnalysisResultSchema = z.object({
-  facts: z.array(caseWorkspaceFactDtoSchema),
-  chronologyEvents: z.array(caseWorkspaceChronologyEventDtoSchema),
-  issues: z.array(caseWorkspaceIssueDtoSchema),
-  sourceSpans: z.array(caseWorkspaceSourceSpanDtoSchema),
+export const caseWorkspaceShapeFactSchema = z.object({
+  factKey: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  label: z.string().min(1),
+  category: z.string().min(1),
+  categoryDetail: z.string().min(1).nullable(),
+  valueType: caseWorkspaceFactValueTypeSchema,
+  statedValue: z.string().min(1).nullable(),
+  normalizedValue: z.string().min(1).nullable(),
+  calculatedValue: z.string().min(1).nullable(),
+  effectiveAt: isoDateTimeSchema.nullable(),
+  observedAt: isoDateTimeSchema.nullable(),
+  isCurrent: z.boolean(),
+  confidence: z.number().min(0).max(1).nullable(),
+  sourceSpanKeys: z.array(z.string().min(1)),
 });
 
-export type CaseWorkspaceAnalysisResult = z.infer<
-  typeof caseWorkspaceAnalysisResultSchema
+export type CaseWorkspaceShapeFact = z.infer<
+  typeof caseWorkspaceShapeFactSchema
+>;
+
+export const caseWorkspaceShapeChronologyEventSchema = z.object({
+  eventKey: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  eventKind: caseWorkspaceEventKindSchema,
+  title: z.string().min(1),
+  description: z.string().min(1).nullable(),
+  occurredAt: isoDateTimeSchema.nullable(),
+  occurredAtPrecision: z.enum(["exact", "day", "month", "unknown"]),
+  confidence: z.number().min(0).max(1).nullable(),
+  sourceSpanKeys: z.array(z.string().min(1)),
+});
+
+export type CaseWorkspaceShapeChronologyEvent = z.infer<
+  typeof caseWorkspaceShapeChronologyEventSchema
+>;
+
+export const caseWorkspaceShapeIssueSchema = z.object({
+  issueKey: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  issueType: caseWorkspaceIssueTypeSchema,
+  severity: caseWorkspaceIssueSeveritySchema,
+  status: caseWorkspaceIssueStatusSchema,
+  title: z.string().min(1),
+  description: z.string().min(1).nullable(),
+  provenanceSummary: z.string().min(1).nullable(),
+  relatedFactKeys: z.array(z.string().min(1)),
+  relatedEventKeys: z.array(z.string().min(1)),
+  sourceSpanKeys: z.array(z.string().min(1)),
+});
+
+export type CaseWorkspaceShapeIssue = z.infer<
+  typeof caseWorkspaceShapeIssueSchema
+>;
+
+export const caseWorkspaceShapeControlActionSchema = z.object({
+  actionKey: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  kind: z.enum([
+    "review_issue",
+    "inspect_provenance",
+    "continue_chronology",
+    "review_facts",
+    "needs_review",
+  ]),
+  label: z.string().min(1),
+  title: z.string().min(1),
+  detail: z.string().min(1).nullable(),
+  relatedIssueKey: z.string().min(1).nullable(),
+  sourceSpanKeys: z.array(z.string().min(1)),
+});
+
+export type CaseWorkspaceShapeControlAction = z.infer<
+  typeof caseWorkspaceShapeControlActionSchema
+>;
+
+export const caseWorkspaceShapeResultSchema = z.object({
+  sourceSpans: z.array(caseWorkspaceShapeSourceSpanSchema),
+  facts: z.array(caseWorkspaceShapeFactSchema),
+  chronologyEvents: z.array(caseWorkspaceShapeChronologyEventSchema),
+  issues: z.array(caseWorkspaceShapeIssueSchema),
+  controlActions: z.array(caseWorkspaceShapeControlActionSchema),
+});
+
+export type CaseWorkspaceShapeResult = z.infer<
+  typeof caseWorkspaceShapeResultSchema
 >;

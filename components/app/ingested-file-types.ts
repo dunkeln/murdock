@@ -12,4 +12,13 @@ export type IngestedFileItem = {
   ocrConversionId?: string;
   ocrStatus: IngestedFileOcrStatus;
   pagesProcessed?: number | null;
+  shapingErrorMessage?: string;
+  shapingRunId?: string;
+  shapingStatus?:
+    | "idle"
+    | "shaping_pending"
+    | "shaping_started"
+    | "ready"
+    | "needs_review"
+    | "failed";
 };

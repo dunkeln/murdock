@@ -26,6 +26,7 @@ const providers: Record<string, Provider> = {
 };
 
 export type GenerateObjectInput<TSchema extends z.ZodType> = {
+  allowFallback?: boolean;
   maxOutputTokens?: number;
   messages: Message[];
   model?: string;
@@ -45,8 +46,8 @@ export async function generateObject<TSchema extends z.ZodType>(
   const messages = z.array(messageSchema).min(1).parse(input.messages);
   const routesResult = selectModelRoutes({
     preferredProvider: input.preferredProvider ?? null,
-    use: input.use ?? "canonical-shaping",
-  });
+    use: input.use ?? "harness-extract",
+  }, input.allowFallback === false ? "single" : "fallback");
 
   if (!routesResult.ok) {
     return {
@@ -118,7 +119,7 @@ export async function generateObject<TSchema extends z.ZodType>(
       return {
         ok: false,
         error: toSchemaValidationError({
-          message: "Model output failed schema validation.",
+          message: `Model output failed schema validation. ${z.prettifyError(parsed.error)} ${describePayload(providerResult.data)}`,
           provider: providerResult.provider,
         }),
       };
@@ -142,4 +143,12 @@ export async function generateObject<TSchema extends z.ZodType>(
       }),
     }
   );
+}
+
+function describePayload(data: unknown) {
+  if (!data || typeof data !== "object") {
+    return `Received ${typeof data}.`;
+  }
+
+  return `Received keys: ${Object.keys(data).slice(0, 12).join(", ") || "none"}.`;
 }

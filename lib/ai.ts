@@ -36,7 +36,7 @@ export const providerConfigSchema = z.object({
 export type ProviderConfig = z.infer<typeof providerConfigSchema>;
 
 export const selectModelInputSchema = z.object({
-  use: modelUseSchema.default("canonical-shaping"),
+  use: modelUseSchema.default("harness-extract"),
   preferredProvider: providerIdSchema.nullable().default(null),
 });
 
@@ -113,6 +113,10 @@ export type GenerateObjectResult<TData> =
       ok: false;
     };
 
+export const modelRouteModeSchema = z.enum(["fallback", "single"]);
+
+export type ModelRouteMode = z.infer<typeof modelRouteModeSchema>;
+
 export function selectModelFromConfig(
   input: SelectModelInput,
   providers: ProviderConfig[],
@@ -132,8 +136,10 @@ export function selectModelFromConfig(
 export function selectModelRoutesFromConfig(
   input: SelectModelInput,
   providers: ProviderConfig[],
+  mode: ModelRouteMode = "fallback",
 ): SelectModelRoutesResult {
   const parsedInput = selectModelInputSchema.parse(input);
+  const parsedMode = modelRouteModeSchema.parse(mode);
   const parsedProviders = z.array(providerConfigSchema).parse(providers);
   const availableProviders = parsedProviders.filter((provider) => {
     return provider.hasKey;
@@ -161,9 +167,12 @@ export function selectModelRoutesFromConfig(
     };
   }
 
+  const routeProviders =
+    parsedMode === "single" ? orderedProviders.slice(0, 1) : orderedProviders;
+
   return {
     ok: true,
-    routes: orderedProviders.map((provider) => {
+    routes: routeProviders.map((provider) => {
       return modelRouteSchema.parse({
         provider: provider.id,
         model: provider.model,

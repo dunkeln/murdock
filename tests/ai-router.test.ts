@@ -6,7 +6,7 @@ describe("model routing", () => {
   it("uses the first configured provider by default", () => {
     expect(
       selectModelFromConfig(
-        { use: "canonical-shaping" },
+        { use: "harness-extract" },
         [
           { id: "anthropic", hasKey: true, model: "claude-default" },
           { id: "openai", hasKey: true, model: "openai-default" },
@@ -17,7 +17,7 @@ describe("model routing", () => {
       route: {
         provider: "anthropic",
         model: "claude-default",
-        use: "canonical-shaping",
+        use: "harness-extract",
       },
     });
   });
@@ -27,7 +27,7 @@ describe("model routing", () => {
       selectModelFromConfig(
         {
           preferredProvider: "anthropic",
-          use: "canonical-shaping",
+          use: "harness-extract",
         },
         [
           { id: "anthropic", hasKey: false, model: "claude-default" },
@@ -39,7 +39,7 @@ describe("model routing", () => {
       route: {
         provider: "openai",
         model: "openai-default",
-        use: "canonical-shaping",
+        use: "harness-extract",
       },
     });
   });
@@ -49,7 +49,7 @@ describe("model routing", () => {
       selectModelRoutesFromConfig(
         {
           preferredProvider: "openai",
-          use: "canonical-shaping",
+          use: "harness-extract",
         },
         [
           { id: "anthropic", hasKey: true, model: "claude-default" },
@@ -62,12 +62,37 @@ describe("model routing", () => {
         {
           provider: "openai",
           model: "openai-default",
-          use: "canonical-shaping",
+          use: "harness-extract",
         },
         {
           provider: "anthropic",
           model: "claude-default",
-          use: "canonical-shaping",
+          use: "harness-extract",
+        },
+      ],
+    });
+  });
+
+  it("can disable fallback routes for provider-pinned workflows", () => {
+    expect(
+      selectModelRoutesFromConfig(
+        {
+          preferredProvider: "anthropic",
+          use: "case-workspace-shaping",
+        },
+        [
+          { id: "anthropic", hasKey: true, model: "claude-default" },
+          { id: "openai", hasKey: true, model: "openai-default" },
+        ],
+        "single",
+      ),
+    ).toEqual({
+      ok: true,
+      routes: [
+        {
+          provider: "anthropic",
+          model: "claude-default",
+          use: "case-workspace-shaping",
         },
       ],
     });
@@ -76,7 +101,7 @@ describe("model routing", () => {
   it("returns a structured configuration failure when no provider is configured", () => {
     expect(
       selectModelFromConfig(
-        { use: "canonical-shaping" },
+        { use: "harness-extract" },
         [
           { id: "anthropic", hasKey: false, model: null },
           { id: "openai", hasKey: false, model: null },
