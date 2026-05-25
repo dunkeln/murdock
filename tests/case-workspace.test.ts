@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCaseControlDto,
+  filterCaseControlBySourceGrounding,
+} from "@/lib/case-control";
+import {
   getCaseWorkspaceAttentionItems,
   getCaseWorkspaceCurrentState,
   getCaseWorkspaceMomentumItems,
@@ -167,6 +171,64 @@ describe("case workspace contracts", () => {
   });
 });
 
+describe("case control grounding", () => {
+  it("filters report cards to the current document, page, and source span", () => {
+    const baseWorkspace = makeWorkspace();
+    const otherSourceSpanId = "77777777-7777-4777-8777-777777777777";
+    const otherIssueId = "88888888-8888-4888-8888-888888888888";
+    const workspace = makeWorkspace({
+      sourceDocuments: baseWorkspace.sourceDocuments.map((document) => ({
+        ...document,
+        ocrConversionId: "99999999-9999-4999-8999-999999999999",
+      })),
+      sourceSpans: [
+        ...baseWorkspace.sourceSpans,
+        {
+          ...baseWorkspace.sourceSpans[0]!,
+          id: otherSourceSpanId,
+          pageIndex: 1,
+          pageLabel: "2",
+          spanKey: "signature",
+          verbatimExcerpt: "Signature line is blank.",
+        },
+      ],
+      issues: [
+        ...baseWorkspace.issues,
+        {
+          ...baseWorkspace.issues[0]!,
+          id: otherIssueId,
+          issueKey: "signature-missing",
+          title: "Signature missing",
+          sourceSpanIds: [otherSourceSpanId],
+        },
+      ],
+    });
+
+    const control = buildCaseControlDto(workspace);
+    const filtered = filterCaseControlBySourceGrounding(control, {
+      docId: sourceDocumentId,
+      fileName: "notice.pdf",
+      pageIndex: 0,
+      spanIds: new Set([sourceSpanId]),
+    });
+
+    expect(filtered.queue).toHaveLength(1);
+    expect(filtered.queue[0]?.id).toBe(issueId);
+    expect(filtered.queue[0]?.sourceRefs.map((source) => source.spanId)).toEqual([
+      sourceSpanId,
+    ]);
+
+    const pageMismatch = filterCaseControlBySourceGrounding(control, {
+      docId: sourceDocumentId,
+      fileName: "notice.pdf",
+      pageIndex: 1,
+      spanIds: new Set([sourceSpanId]),
+    });
+
+    expect(pageMismatch.queue).toEqual([]);
+  });
+});
+
 describe("case workspace row mappers", () => {
   it("maps repository rows into DTOs with numeric confidence and array links", () => {
     const sourceDocument = toCaseWorkspaceSourceDocumentDto({
@@ -276,7 +338,7 @@ describe("case workspace deterministic issue handling", () => {
 
     expect(getCaseWorkspaceCurrentState(workspace)).toMatchObject({
       readinessTone: "blocked",
-      readinessLabel: "Needs review before reliance",
+      readinessLabel: "Source items open",
       openIssueCount: 1,
       highSeverityIssueCount: 1,
       contradictionCount: 1,

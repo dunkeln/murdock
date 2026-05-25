@@ -25,7 +25,10 @@ import {
 } from "@/app/(app)/actions";
 import type { IngestedFileItem } from "@/components/app/ingested-file-types";
 import { IngestedFilesProvider } from "@/components/app/ingested-files-context";
-import { IngestedFilesList } from "@/components/app/ingested-files-list";
+import {
+  CaseDocumentSwitcher,
+  type CaseDocumentSwitcherItem,
+} from "@/components/app/case-workspace/components/case-document-switcher";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -301,15 +304,15 @@ export function AppFrame({ cases, children }: AppFrameProps) {
   const [ingestedFiles, setIngestedFiles] = React.useState<IngestedFileItem[]>(
     []
   );
-  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(
+  const [previewedFileId, setPreviewedFileId] = React.useState<string | null>(
     null
   );
-  const [checkedFileIds, setCheckedFileIds] = React.useState<string[]>([]);
-  const checkedFileIdsRef = React.useRef<string[]>([]);
-  const selectedFile = React.useMemo(
+  const [includedFileIds, setIncludedFileIds] = React.useState<string[]>([]);
+  const includedFileIdsRef = React.useRef<string[]>([]);
+  const previewedFile = React.useMemo(
     () =>
-      ingestedFiles.find((item) => item.id === selectedFileId)?.file ?? null,
-    [ingestedFiles, selectedFileId]
+      ingestedFiles.find((item) => item.id === previewedFileId)?.file ?? null,
+    [ingestedFiles, previewedFileId]
   );
   const activeCase = React.useMemo(() => {
     const segments = pathname.split("/").filter(Boolean);
@@ -319,13 +322,25 @@ export function AppFrame({ cases, children }: AppFrameProps) {
   }, [cases, pathname]);
 
   React.useEffect(() => {
-    checkedFileIdsRef.current = checkedFileIds;
-  }, [checkedFileIds]);
+    includedFileIdsRef.current = includedFileIds;
+  }, [includedFileIds]);
 
-  const changeCheckedFileIds = React.useCallback((fileIds: string[]) => {
-    checkedFileIdsRef.current = fileIds;
-    setCheckedFileIds(fileIds);
+  const changeIncludedFileIds = React.useCallback((fileIds: string[]) => {
+    includedFileIdsRef.current = fileIds;
+    setIncludedFileIds(fileIds);
   }, []);
+
+  const changeFileInclusion = React.useCallback(
+    (fileId: string, included: boolean) => {
+      const currentIds = includedFileIdsRef.current;
+      const nextIds = included
+        ? Array.from(new Set([...currentIds, fileId]))
+        : currentIds.filter((id) => id !== fileId);
+
+      changeIncludedFileIds(nextIds);
+    },
+    [changeIncludedFileIds]
+  );
 
   const updateIngestedFile = React.useCallback(
     (fileId: string, patch: Partial<IngestedFileItem>) => {
@@ -349,8 +364,8 @@ export function AppFrame({ cases, children }: AppFrameProps) {
         return;
       }
 
-      const checkedIds = new Set(checkedFileIdsRef.current);
-      const filesToShape = readyFiles.filter((file) => checkedIds.has(file.itemId));
+      const includedIds = new Set(includedFileIdsRef.current);
+      const filesToShape = readyFiles.filter((file) => includedIds.has(file.itemId));
 
       if (filesToShape.length === 0) {
         return;
@@ -366,7 +381,7 @@ export function AppFrame({ cases, children }: AppFrameProps) {
       const description =
         filesToShape.length === 1
           ? filesToShape[0]!.fileName
-          : `${filesToShape.length} checked files`;
+          : `${filesToShape.length} included files`;
 
       toast.loading("Adding source to matter", {
         description,
@@ -588,10 +603,10 @@ export function AppFrame({ cases, children }: AppFrameProps) {
         ...acceptedFileItems,
         ...currentFiles,
       ]);
-      setCheckedFileIds((currentIds) => {
+      setIncludedFileIds((currentIds) => {
         const nextIds = Array.from(new Set([...currentIds, ...acceptedFileIds]));
 
-        checkedFileIdsRef.current = nextIds;
+        includedFileIdsRef.current = nextIds;
         return nextIds;
       });
       if (uniqueFiles.length < acceptedFiles.length) {
@@ -617,13 +632,13 @@ export function AppFrame({ cases, children }: AppFrameProps) {
       setIngestedFiles((currentFiles) =>
         currentFiles.filter((currentFile) => currentFile.id !== fileId)
       );
-      setCheckedFileIds((currentIds) => {
+      setIncludedFileIds((currentIds) => {
         const nextIds = currentIds.filter((id) => id !== fileId);
 
-        checkedFileIdsRef.current = nextIds;
+        includedFileIdsRef.current = nextIds;
         return nextIds;
       });
-      setSelectedFileId((currentId) => (currentId === fileId ? null : currentId));
+      setPreviewedFileId((currentId) => (currentId === fileId ? null : currentId));
       toast("File removed", {
         description: deletedFile?.fileName,
       });
@@ -631,23 +646,46 @@ export function AppFrame({ cases, children }: AppFrameProps) {
     [ingestedFiles]
   );
 
+  const documentSwitcherItems = React.useMemo<CaseDocumentSwitcherItem[]>(
+    () =>
+      ingestedFiles.map((item) => ({
+        id: `transient:${item.id}`,
+        isIncluded: includedFileIds.includes(item.id),
+        isPreviewed: previewedFileId === item.id,
+        label: item.fileName,
+        onDelete: () => deleteIngestedFile(item.id),
+        onIncludeChange: (included: boolean) =>
+          changeFileInclusion(item.id, included),
+        onPreviewChange: (previewed: boolean) =>
+          setPreviewedFileId(previewed ? item.id : null),
+        variant: "transient" as const,
+      })),
+    [
+      changeFileInclusion,
+      deleteIngestedFile,
+      includedFileIds,
+      ingestedFiles,
+      previewedFileId,
+    ]
+  );
+
   const ingestedFilesContextValue = React.useMemo(
     () => ({
-      checkedFileIds,
+      includedFileIds,
       files: ingestedFiles,
-      onCheckedFileIdsChange: changeCheckedFileIds,
+      onIncludedFileIdsChange: changeIncludedFileIds,
       onDeleteFile: deleteIngestedFile,
-      onSelectFile: setSelectedFileId,
-      selectedFile,
-      selectedFileId,
+      onPreviewFile: setPreviewedFileId,
+      previewedFile,
+      previewedFileId,
     }),
     [
-      checkedFileIds,
-      changeCheckedFileIds,
+      includedFileIds,
+      changeIncludedFileIds,
       deleteIngestedFile,
       ingestedFiles,
-      selectedFile,
-      selectedFileId,
+      previewedFile,
+      previewedFileId,
     ]
   );
 
@@ -800,14 +838,7 @@ export function AppFrame({ cases, children }: AppFrameProps) {
             >
               <div className="h-full min-h-0 min-w-0">{children}</div>
               {caseWorkspaceOwnsFiles ? null : (
-                <IngestedFilesList
-                  checkedFileIds={checkedFileIds}
-                  files={ingestedFiles}
-                  onCheckedFileIdsChange={changeCheckedFileIds}
-                  onDeleteFile={deleteIngestedFile}
-                  onSelectFile={setSelectedFileId}
-                  selectedFileId={selectedFileId}
-                />
+                <CaseDocumentSwitcher items={documentSwitcherItems} />
               )}
             </div>
           </div>

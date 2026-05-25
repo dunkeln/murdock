@@ -1,138 +1,135 @@
 "use client";
 
-import { AlertCircle, FileText, Trash2 } from "lucide-react";
+import { File, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 
-import { useIngestedFiles } from "@/components/app/ingested-files-context";
-import type { IngestedFileItem } from "@/components/app/ingested-file-types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toggle } from "@/components/ui/toggle";
-import type { CaseWorkspaceSourceDocumentDto } from "@/lib/contracts/case-workspace";
 import { cn } from "@/lib/utils";
+
+const fileRowClass =
+  "h-8 w-full min-w-0 overflow-hidden border border-paper/15 px-2.5 text-sm leading-none text-paper transition-colors hover:!border-paper hover:!bg-paper hover:!text-ink hover:[&_*]:!text-ink hover:[&_svg]:!text-ink";
+const previewedFileRowClass =
+  "!border-paper !bg-paper !text-ink [&_*]:!text-ink [&_svg]:!text-ink hover:!border-paper hover:!bg-paper hover:!text-ink";
+const fileRowTextClass = "block min-w-0 flex-1 truncate leading-none";
+const fileRowIconBoxClass =
+  "grid size-3 shrink-0 place-items-center overflow-hidden";
+const fileRowIconClass = "size-3 shrink-0";
+const transparentCheckboxClass =
+  "size-3.5 rounded-none !border-transparent !bg-transparent text-current after:hidden hover:!bg-transparent data-checked:!border-transparent data-checked:!bg-transparent data-checked:!text-current [&_svg]:size-3";
+const iconButtonClass =
+  "size-3.5 rounded-none border-0 bg-transparent p-0 text-current hover:!bg-transparent hover:!text-current [&_svg]:size-3";
 
 type CaseDocumentSwitcherProps = {
   className?: string;
-  documents: CaseWorkspaceSourceDocumentDto[];
-  onSelectedDocumentChange: (documentId: string | null) => void;
-  selectedDocumentId: string | null;
+  items: CaseDocumentSwitcherItem[];
 };
 
-function isFailed(item: IngestedFileItem) {
-  return item.ocrStatus === "failed" || item.shapingStatus === "failed";
+export type CaseDocumentSwitcherItem = {
+  id: string;
+  isIncluded?: boolean;
+  isPreviewed: boolean;
+  label: string;
+  onDelete?: () => void;
+  onIncludeChange?: (included: boolean) => void;
+  onPreviewChange: (previewed: boolean) => void;
+  variant: "persisted" | "transient";
+};
+
+function FileRowIcon() {
+  return (
+    <span className={fileRowIconBoxClass}>
+      <File
+        aria-hidden="true"
+        className={fileRowIconClass}
+        strokeWidth={1.9}
+      />
+    </span>
+  );
 }
 
-function SourceIcon({ item }: { item: IngestedFileItem }) {
-  if (isFailed(item)) {
-    return <AlertCircle className="size-3" data-icon="inline-start" />;
+function FileRowText({ children }: { children: ReactNode }) {
+  return <span className={fileRowTextClass}>{children}</span>;
+}
+
+function CaseDocumentRow({ item }: { item: CaseDocumentSwitcherItem }) {
+  if (item.variant === "persisted") {
+    return (
+      <button
+        aria-pressed={item.isPreviewed}
+        className={cn(
+          fileRowClass,
+          "flex w-full items-center gap-2 text-left",
+          item.isPreviewed && previewedFileRowClass,
+        )}
+        onClick={() => item.onPreviewChange(!item.isPreviewed)}
+        type="button"
+      >
+        <FileRowIcon />
+        <FileRowText>{item.label}</FileRowText>
+      </button>
+    );
   }
 
-  return <FileText className="size-3" data-icon="inline-start" />;
+  return (
+    <div
+      className={cn(
+        fileRowClass,
+        "grid grid-cols-[0.875rem_minmax(0,1fr)_0.875rem] items-center gap-2",
+        item.isPreviewed && previewedFileRowClass,
+      )}
+    >
+      <Checkbox
+        aria-label={`Include ${item.label} in case context`}
+        checked={Boolean(item.isIncluded)}
+        className={transparentCheckboxClass}
+        onCheckedChange={(checked) => item.onIncludeChange?.(Boolean(checked))}
+      />
+      <Toggle
+        aria-label={`Open ${item.label}`}
+        className="h-auto max-w-full min-w-0 justify-start overflow-hidden rounded-none border-0 bg-transparent p-0 text-current hover:!bg-transparent hover:!text-current aria-pressed:!bg-transparent has-data-[icon=inline-start]:pl-0"
+        onPressedChange={item.onPreviewChange}
+        pressed={item.isPreviewed}
+      >
+        <FileRowText>{item.label}</FileRowText>
+      </Toggle>
+      <div className="flex size-3.5 items-center justify-end overflow-hidden">
+        {item.onDelete ? (
+          <Button
+            aria-label={`Remove ${item.label}`}
+            className={iconButtonClass}
+            onClick={item.onDelete}
+            size="icon-xs"
+            type="button"
+            variant="ghost"
+          >
+            <Trash2 aria-hidden="true" />
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function CaseDocumentSwitcher({
   className,
-  documents,
-  onSelectedDocumentChange,
-  selectedDocumentId,
+  items,
 }: CaseDocumentSwitcherProps) {
-  const intake = useIngestedFiles();
-  const persistedDocumentIds = new Set(
-    documents.flatMap((document) =>
-      document.caseDocumentId ? [document.caseDocumentId] : [],
-    ),
-  );
-  const transientFiles = intake.files.filter(
-    (item) => !item.caseDocumentId || !persistedDocumentIds.has(item.caseDocumentId),
-  );
-  const itemCount = documents.length + transientFiles.length;
-  const isScrollable = itemCount > 3;
+  const isScrollable = items.length > 3;
 
-  if (itemCount === 0) {
+  if (items.length === 0) {
     return null;
   }
 
   const documentItems = (
     <ol className="flex flex-col gap-1">
-      {documents.map((document) => {
-        const isSelected = selectedDocumentId === document.id;
-
-        return (
-          <li key={document.id}>
-            <button
-              aria-pressed={isSelected}
-              className={cn(
-                "grid h-8 w-full grid-cols-[0.75rem_minmax(0,1fr)_1rem] items-center gap-2 border border-paper/15 px-2.5 text-left text-paper transition-colors hover:bg-paper/10",
-                isSelected && "border-paper bg-paper text-ink hover:bg-paper",
-              )}
-              onClick={() => onSelectedDocumentChange(isSelected ? null : document.id)}
-              type="button"
-            >
-              <FileText className="size-3" data-icon="inline-start" />
-              <span className="truncate">{document.fileName}</span>
-              <span aria-hidden="true" />
-            </button>
-          </li>
-        );
-      })}
-      {transientFiles.map((item) => {
-        const isChecked = intake.checkedFileIds.includes(item.id);
-        const isSelected = intake.selectedFileId === item.id;
-
-        return (
-          <li key={item.id}>
-            <div
-              className={cn(
-                "grid h-8 grid-cols-[0.75rem_minmax(0,1fr)_1rem] items-center gap-2 border border-paper/15 px-2.5 text-paper transition-colors hover:bg-paper/10",
-                isSelected && "border-paper bg-paper text-ink hover:bg-paper",
-              )}
-            >
-              <Checkbox
-                aria-label={`Include ${item.fileName} in case context`}
-                checked={isChecked}
-                className="rounded-none border-transparent bg-transparent text-current data-checked:border-transparent data-checked:bg-transparent data-checked:text-current"
-                onCheckedChange={(checked) => {
-                  intake.onCheckedFileIdsChange(
-                    checked
-                      ? [...intake.checkedFileIds, item.id]
-                      : intake.checkedFileIds.filter((id) => id !== item.id),
-                  );
-                }}
-              />
-              <Toggle
-                aria-label={`Open ${item.fileName}`}
-                className={cn(
-                  "h-auto max-w-full min-w-0 justify-start gap-2 overflow-hidden rounded-none border-0 bg-transparent p-0 text-paper hover:!bg-transparent hover:!text-paper aria-pressed:!bg-transparent has-data-[icon=inline-start]:pl-0",
-                  isSelected && "text-ink hover:!bg-transparent hover:!text-ink",
-                )}
-                onPressedChange={(pressed) => {
-                  onSelectedDocumentChange(null);
-                  intake.onSelectFile(pressed ? item.id : null);
-                }}
-                pressed={isSelected}
-              >
-                <SourceIcon item={item} />
-                <span className="truncate">{item.fileName}</span>
-              </Toggle>
-              <div className="flex size-6 items-center justify-end overflow-hidden">
-                <Button
-                  aria-label={`Remove ${item.fileName}`}
-                  className={cn(
-                    "size-6 rounded-none border-0 bg-transparent p-0 text-paper hover:!bg-transparent hover:!text-paper",
-                    isSelected && "text-ink hover:!bg-transparent hover:!text-ink",
-                  )}
-                  onClick={() => intake.onDeleteFile(item.id)}
-                  size="icon-xs"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Trash2 data-icon="inline-start" />
-                </Button>
-              </div>
-            </div>
-          </li>
-        );
-      })}
+      {items.map((item) => (
+        <li key={item.id}>
+          <CaseDocumentRow item={item} />
+        </li>
+      ))}
     </ol>
   );
 
@@ -140,7 +137,7 @@ export function CaseDocumentSwitcher({
     <section
       aria-label="Case documents"
       className={cn(
-        "w-full max-w-[30rem] min-w-0 text-sm text-paper/70 lg:w-[min(30rem,38vw)] lg:max-w-none",
+        "w-full min-w-0 text-sm text-paper/70",
         className,
       )}
     >

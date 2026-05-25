@@ -60,6 +60,13 @@ export type CaseControlDto = {
   };
 };
 
+export type CaseControlSourceGrounding = {
+  docId: string | null;
+  fileName: string | null;
+  pageIndex: number | null;
+  spanIds: ReadonlySet<string>;
+};
+
 const priorityLabels = {
   high: "High",
   low: "Low",
@@ -171,6 +178,49 @@ function compareIssues(left: CaseWorkspaceIssueDto, right: CaseWorkspaceIssueDto
   );
 }
 
+function sourceRefMatchesGrounding(
+  sourceRef: CaseControlSourceRef,
+  grounding: CaseControlSourceGrounding,
+) {
+  return (
+    grounding.docId !== null &&
+    grounding.fileName !== null &&
+    grounding.pageIndex !== null &&
+    sourceRef.docId === grounding.docId &&
+    sourceRef.fileName === grounding.fileName &&
+    sourceRef.pageIndex === grounding.pageIndex &&
+    grounding.spanIds.has(sourceRef.spanId)
+  );
+}
+
+export function filterCaseControlBySourceGrounding(
+  control: CaseControlDto,
+  grounding: CaseControlSourceGrounding,
+): CaseControlDto {
+  const queue = control.queue.flatMap((item) => {
+    const sourceRefs = item.sourceRefs.filter((sourceRef) =>
+      sourceRefMatchesGrounding(sourceRef, grounding),
+    );
+
+    if (sourceRefs.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        ...item,
+        sourceRefs,
+      },
+    ];
+  });
+
+  return {
+    ...control,
+    activeItem: queue[0] ?? null,
+    queue,
+  };
+}
+
 function primaryCopy(input: {
   docs: number;
   openItems: number;
@@ -187,7 +237,7 @@ function primaryCopy(input: {
   if (input.openItems > 0 && input.activeItem) {
     return {
       detail: input.activeItem.title,
-      message: input.activeItem.blocking ? "Needs review" : "Needs attention",
+      message: "Open item",
       readiness: "needs_review" as const,
     };
   }

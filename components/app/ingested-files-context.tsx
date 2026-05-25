@@ -5,13 +5,13 @@ import * as React from "react";
 import type { IngestedFileItem } from "@/components/app/ingested-file-types";
 
 type IngestedFilesContextValue = {
-  checkedFileIds: string[];
+  includedFileIds: string[];
   files: IngestedFileItem[];
-  onCheckedFileIdsChange: (fileIds: string[]) => void;
   onDeleteFile: (fileId: string) => void;
-  onSelectFile: (fileId: string | null) => void;
-  selectedFile: File | null;
-  selectedFileId: string | null;
+  onIncludedFileIdsChange: (fileIds: string[]) => void;
+  onPreviewFile: (fileId: string | null) => void;
+  previewedFile: File | null;
+  previewedFileId: string | null;
 };
 
 const IngestedFilesContext =

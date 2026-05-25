@@ -152,7 +152,7 @@ export function getCaseWorkspaceCurrentState(
   if (highSeverityIssueCount > 0 || contradictionCount > 0) {
     return {
       readinessTone: "blocked",
-      readinessLabel: "Needs review before reliance",
+      readinessLabel: "Source items open",
       readinessDetail:
         "Resolve surfaced contradictions before using draft operational dates.",
       openIssueCount: openIssues.length,

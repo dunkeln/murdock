@@ -10,7 +10,9 @@ import { getOcrConversionsByFirmAndIds } from "@/lib/server/documents/ocr-conver
 import { runError, runStarted, stepFinished, stepStarted } from "@/lib/server/agui/events";
 import { workspaceReadyEvents } from "@/lib/server/agui/workspace";
 import {
+  claimHarnessSourcesForRun,
   finishHarnessRun,
+  getHarnessSourceRunStateByCase,
   recordHarnessRunArtifact,
   recordHarnessRunSources,
   recordHarnessRunStepFinished,
@@ -33,6 +35,7 @@ import {
   type ShapeInput,
   type ShapeResult,
 } from "@/lib/server/workflows/shape/schema";
+import { partitionSourcesByHarnessState } from "@/lib/server/workflows/shape/source-selection";
 
 function threadId(caseId: string) {
   return `case:${caseId}:workspace-control`;
@@ -224,11 +227,19 @@ export async function shapeCurrentUserWorkspaceFromOcr(
           });
         }
 
-        const existingSourceKeys = new Set(
-          existingWorkspace.workspace.sourceDocuments.map((document) => document.sourceKey),
+        const sourceDocumentIdBySourceKey = new Map(
+          existingWorkspace.workspace.sourceDocuments.map((document) => [
+            document.sourceKey,
+            document.id,
+          ]),
         );
-        const sourcesToShape = sources.filter(
-          (source) => !existingSourceKeys.has(source.sourceKey),
+        const harnessSourceState = await getHarnessSourceRunStateByCase({
+          caseId: parsed.caseId,
+          sourceKeys: sources.map((source) => source.sourceKey),
+        });
+        const { runningSources, sourcesToShape } = partitionSourcesByHarnessState(
+          sources,
+          harnessSourceState,
         );
 
         if (sourcesToShape.length === 0) {
@@ -236,7 +247,9 @@ export async function shapeCurrentUserWorkspaceFromOcr(
             (issue) => issue.status === "open",
           )
             ? "needs_review"
-            : "ready";
+            : runningSources.length > 0
+              ? "shaping_started"
+              : "ready";
 
           return {
             ok: true,
@@ -255,9 +268,38 @@ export async function shapeCurrentUserWorkspaceFromOcr(
           };
         }
 
+        const claimedSourceKeys = new Set(
+          await claimHarnessSourcesForRun({
+            caseId: parsed.caseId,
+            runId,
+            sourceKeys: sourcesToShape.map((source) => source.sourceKey),
+          }),
+        );
+        const claimedSourcesToShape = sourcesToShape.filter((source) =>
+          claimedSourceKeys.has(source.sourceKey),
+        );
+
+        if (claimedSourcesToShape.length === 0) {
+          return {
+            ok: true,
+            caseId: parsed.caseId,
+            events: [
+              ...startedEvents,
+              stepFinished("ocr-ready"),
+              ...workspaceReadyEvents({
+                runId,
+                threadId: threadId(parsed.caseId),
+                workspace: existingWorkspace.workspace,
+              }).slice(3),
+            ],
+            runId,
+            status: "shaping_started",
+          };
+        }
+
         await startHarnessRun({
           caseId: parsed.caseId,
-          fileCount: sourcesToShape.length,
+          fileCount: claimedSourcesToShape.length,
           firmId: user.firmId,
           runId,
         });
@@ -265,13 +307,14 @@ export async function shapeCurrentUserWorkspaceFromOcr(
         await recordHarnessRunSources({
           caseId: parsed.caseId,
           runId,
-          sources: sourcesToShape.map((source) => ({
+          sources: claimedSourcesToShape.map((source) => ({
             documentSha256: source.conversion.documentSha256,
             fileName: source.fileName,
             ocrConversionId: source.conversion.id,
             pagesProcessed: source.conversion.pagesProcessed,
             provider: source.conversion.provider,
             providerModel: source.conversion.providerModel,
+            sourceDocumentId: sourceDocumentIdBySourceKey.get(source.sourceKey) ?? null,
             sourceKey: source.sourceKey,
           })),
         });
@@ -311,14 +354,14 @@ export async function shapeCurrentUserWorkspaceFromOcr(
                 stepName: event.stepName,
               }),
           }),
-          sources: sourcesToShape,
+          sources: claimedSourcesToShape,
         });
         if ("isError" in shapeResult) {
           await finishHarnessRun({
             error: shapeResult,
             finalStatus: "failed",
             runId,
-            stats: { sourceCount: sourcesToShape.length },
+            stats: { sourceCount: claimedSourcesToShape.length },
           });
 
           return fail({ caseId: parsed.caseId, runId, startedEvents, error: shapeResult });
@@ -344,7 +387,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
         await persistShape({
           caseId: parsed.caseId,
           shape: shapeResult.shape,
-          sources: sourcesToShape,
+          sources: claimedSourcesToShape,
         });
         const workspace = await getCurrentUserCaseWorkspaceById(parsed.caseId);
 
@@ -372,7 +415,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
             stats: runStats({
               bundles: shapeResult.bundles,
               shapeIssueCount: shapeResult.shape.issues.length,
-              sourceCount: sourcesToShape.length,
+              sourceCount: claimedSourcesToShape.length,
             }),
             usage: aggregateUsage(shapeResult.bundles),
           });
@@ -393,7 +436,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
           stats: runStats({
             bundles: shapeResult.bundles,
             shapeIssueCount: shapeResult.shape.issues.length,
-            sourceCount: sourcesToShape.length,
+            sourceCount: claimedSourcesToShape.length,
           }),
           usage: aggregateUsage(shapeResult.bundles),
         });

@@ -6,9 +6,14 @@ import {
   shapeFromOcr,
   type SourceInput,
 } from "@/lib/server/workflows/shape/project";
+import {
+  maxAutoHarnessFailedRuns,
+  partitionSourcesByHarnessState,
+} from "@/lib/server/workflows/shape/source-selection";
 
 const runHarnessFromConversionMock = vi.hoisted(() => vi.fn());
 const originalMaxSourceCalls = process.env.HARNESS_MAX_SOURCE_CALLS;
+const originalAutoMaxRetries = process.env.HARNESS_AUTO_MAX_RETRIES;
 
 vi.mock("@/lib/server/harness/workflows/v1/run", () => ({
   runHarnessFromConversion: runHarnessFromConversionMock,
@@ -80,6 +85,11 @@ describe("workspace shape projection", () => {
     } else {
       process.env.HARNESS_MAX_SOURCE_CALLS = originalMaxSourceCalls;
     }
+    if (originalAutoMaxRetries === undefined) {
+      delete process.env.HARNESS_AUTO_MAX_RETRIES;
+    } else {
+      process.env.HARNESS_AUTO_MAX_RETRIES = originalAutoMaxRetries;
+    }
   });
 
   it("runs source harnesses with bounded concurrency and stable output order", async () => {
@@ -137,5 +147,55 @@ describe("workspace shape projection", () => {
     expect(result.bundles.map((item) => item.source.sourceKey)).toEqual(
       conversionIds.map((id) => `ocr-${id}`),
     );
+  });
+
+  it("selects only OCR sources without completed or running harness work", () => {
+    const sources = conversionIds.map(source);
+
+    const result = partitionSourcesByHarnessState(sources, {
+      completedSourceKeys: [`ocr-${conversionIds[0]}`],
+      runningSourceKeys: [`ocr-${conversionIds[1]}`],
+    });
+
+    expect(result.completedSources.map((item) => item.sourceKey)).toEqual([
+      `ocr-${conversionIds[0]}`,
+    ]);
+    expect(result.runningSources.map((item) => item.sourceKey)).toEqual([
+      `ocr-${conversionIds[1]}`,
+    ]);
+    expect(result.sourcesToShape.map((item) => item.sourceKey)).toEqual([
+      `ocr-${conversionIds[2]}`,
+    ]);
+  });
+
+  it("stops eager retries once a source reaches the configured failure cap", () => {
+    const sources = conversionIds.map(source);
+
+    const result = partitionSourcesByHarnessState(
+      sources,
+      {
+        completedSourceKeys: [],
+        failedRunCountsBySourceKey: {
+          [`ocr-${conversionIds[0]}`]: 3,
+          [`ocr-${conversionIds[1]}`]: 1,
+        },
+        runningSourceKeys: [],
+      },
+      { maxFailedRuns: 3 },
+    );
+
+    expect(result.exhaustedSources.map((item) => item.sourceKey)).toEqual([
+      `ocr-${conversionIds[0]}`,
+    ]);
+    expect(result.sourcesToShape.map((item) => item.sourceKey)).toEqual([
+      `ocr-${conversionIds[1]}`,
+      `ocr-${conversionIds[2]}`,
+    ]);
+  });
+
+  it("treats auto max retries as retries after the first failed attempt", () => {
+    process.env.HARNESS_AUTO_MAX_RETRIES = "2";
+
+    expect(maxAutoHarnessFailedRuns()).toBe(3);
   });
 });

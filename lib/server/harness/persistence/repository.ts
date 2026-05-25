@@ -21,8 +21,105 @@ export type HarnessRunSourceInput = {
   sourceKey: string;
 };
 
+type HarnessSourceRunStateRow = {
+  failed_run_count: number | string;
+  has_completed_run: boolean;
+  has_running_run: boolean;
+  source_key: string;
+};
+
+type HarnessSourceClaimRow = {
+  source_key: string;
+};
+
 function jsonb(value: unknown) {
   return JSON.stringify(value ?? {});
+}
+
+export async function getHarnessSourceRunStateByCase(input: {
+  caseId: string;
+  sourceKeys: readonly string[];
+}) {
+  const sql = createNeonSql();
+  const sourceKeys = [...new Set(input.sourceKeys)];
+
+  if (sourceKeys.length === 0) {
+    return {
+      completedSourceKeys: [],
+      failedRunCountsBySourceKey: {},
+      runningSourceKeys: [],
+    };
+  }
+
+  const rows = (await sql`
+    select
+      hrs.source_key,
+      bool_or(hr.status = 'running') as has_running_run,
+      count(*) filter (where hr.status = 'failed') as failed_run_count,
+      bool_or(
+        hr.harness_version = ${HARNESS_VERSION}
+        and hr.status in ('ready', 'needs_review')
+        and hr.final_status in ('ready', 'needs_review')
+      ) as has_completed_run
+    from public.harness_run_sources hrs
+    join public.harness_runs hr on hr.id = hrs.run_id
+    where hrs.case_id = ${input.caseId}
+      and hrs.source_key = any(${sourceKeys})
+    group by hrs.source_key
+  `) as HarnessSourceRunStateRow[];
+
+  return {
+    completedSourceKeys: rows
+      .filter((row) => row.has_completed_run)
+      .map((row) => row.source_key),
+    failedRunCountsBySourceKey: Object.fromEntries(
+      rows.map((row) => [row.source_key, Number(row.failed_run_count)]),
+    ),
+    runningSourceKeys: rows
+      .filter((row) => row.has_running_run)
+      .map((row) => row.source_key),
+  };
+}
+
+export async function claimHarnessSourcesForRun(input: {
+  caseId: string;
+  runId: string;
+  sourceKeys: readonly string[];
+}) {
+  const sql = createNeonSql();
+  const sourceKeys = [...new Set(input.sourceKeys)];
+
+  if (sourceKeys.length === 0) {
+    return [];
+  }
+
+  const rows = (await sql`
+    insert into public.harness_source_claims (
+      case_id,
+      source_key,
+      run_id,
+      status,
+      expires_at
+    )
+    select
+      ${input.caseId},
+      source_key,
+      ${input.runId},
+      'running',
+      now() + interval '10 minutes'
+    from unnest(${sourceKeys}::text[]) as input_source(source_key)
+    on conflict (case_id, source_key) do update
+    set
+      run_id = excluded.run_id,
+      status = 'running',
+      expires_at = excluded.expires_at,
+      updated_at = now()
+    where public.harness_source_claims.status <> 'running'
+      or public.harness_source_claims.expires_at < now()
+    returning source_key
+  `) as HarnessSourceClaimRow[];
+
+  return rows.map((row) => row.source_key);
 }
 
 export async function startHarnessRun(input: {
@@ -304,5 +401,14 @@ export async function finishHarnessRun(input: {
       completed_at = now(),
       updated_at = now()
     where id = ${input.runId}
+  `;
+
+  await sql`
+    update public.harness_source_claims
+    set
+      status = ${input.finalStatus},
+      expires_at = now(),
+      updated_at = now()
+    where run_id = ${input.runId}
   `;
 }

@@ -24,12 +24,12 @@ export function WorkspaceInputFooter({
   placeholder,
 }: WorkspaceInputFooterProps) {
   const intake = useIngestedFiles();
-  const checkedFiles = intake.files.filter((file) =>
-    intake.checkedFileIds.includes(file.id)
+  const includedFiles = intake.files.filter((file) =>
+    intake.includedFileIds.includes(file.id)
   );
   const operationalReady =
-    checkedFiles.length > 0
-      ? checkedFiles.every((file) => isHarnessReady(file.shapingStatus))
+    includedFiles.length > 0
+      ? includedFiles.every((file) => isHarnessReady(file.shapingStatus))
       : initialOperationalReady;
 
   return (

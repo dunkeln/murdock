@@ -150,3 +150,11 @@
 @utility hover-theme-invert {
   @apply hover:!bg-paper hover:!text-ink;
 }
+
+@utility interactive-theme-invert {
+  @apply transition-colors hover:border-paper hover:bg-paper hover:text-ink;
+}
+
+@utility active-theme-invert {
+  @apply border-paper bg-paper text-ink;
+}

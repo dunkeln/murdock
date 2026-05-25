@@ -10,8 +10,7 @@ import {
   updateCurrentUserCaseTitle,
 } from "@/lib/server/cases/service";
 import { getCaseSummaryByUserAndId } from "@/lib/server/cases/repository";
-import { upsertCaseDocument } from "@/lib/server/documents/case-documents-repository";
-import { toUint8Array } from "@/lib/server/documents/content";
+import { storeUploadedCaseDocument } from "@/lib/server/documents/case-document-workspace-service";
 import { ensureCurrentFirmMistralOcrConversion } from "@/lib/server/documents/ocr-conversions-service";
 import { withLangfuseObservation } from "@/lib/server/telemetry/langfuse";
 import {
@@ -317,16 +316,11 @@ export async function ingestDocumentOcrAction(
             };
           }
 
-          const bytes = await toUint8Array(file);
-          const caseDocument = await upsertCaseDocument({
-            bytes,
+          const caseDocument = await storeUploadedCaseDocument({
             caseId: parsedInput.caseId,
-            documentSha256: result.conversion.documentSha256,
-            fileName: file.name,
+            conversion: result.conversion,
+            file,
             firmId: user.firmId,
-            mimeType: file.type || "application/octet-stream",
-            ocrConversionId: result.conversion.id,
-            sizeBytes: file.size,
           });
 
           caseDocumentId = caseDocument.id;
