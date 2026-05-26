@@ -13,6 +13,7 @@ import {
   getCaseReviewDigestOutputSchema,
   getCaseContextOutputSchema,
   getDocumentUpdatesOutputSchema,
+  getMatterSnapshotOutputSchema,
   getOpenReviewActionsOutputSchema,
   getOperationalSignalsOutputSchema,
   getSourceSpanOutputSchema,
@@ -25,6 +26,7 @@ import {
 } from "@/lib/contracts/mcp";
 import type { CaseWorkspaceDto } from "@/lib/contracts/case-workspace";
 import type { DocumentRevisionSummaryDto } from "@/lib/contracts/document-revisions";
+import type { MatterOperationDto } from "@/lib/contracts/matter-operations";
 import {
   caseReviewActionDtoSchema,
   type CaseReviewActionDto,
@@ -39,10 +41,12 @@ import {
 } from "@/lib/server/case-workspace/service";
 import { listCurrentUserCaseSummaries } from "@/lib/server/cases/service";
 import { getDocumentRevisionSummariesByCaseId } from "@/lib/server/revisions/repository";
+import { getMatterOperationalSnapshot } from "@/lib/server/matter-operations/service";
 
 type MurdockMcpDependencies = {
   getCurrentUser: typeof getCurrentUser;
   getDocumentRevisionSummariesByCaseId: typeof getDocumentRevisionSummariesByCaseId;
+  getMatterOperationalSnapshot: typeof getMatterOperationalSnapshot;
   getWorkspaceById: typeof getCurrentUserCaseWorkspaceById;
   getWorkspaceBySlug: typeof getCurrentUserCaseWorkspaceBySlug;
   listCases: typeof listCurrentUserCaseSummaries;
@@ -52,6 +56,7 @@ type MurdockMcpDependencies = {
 const defaultDependencies: MurdockMcpDependencies = {
   getCurrentUser,
   getDocumentRevisionSummariesByCaseId,
+  getMatterOperationalSnapshot,
   getWorkspaceById: getCurrentUserCaseWorkspaceById,
   getWorkspaceBySlug: getCurrentUserCaseWorkspaceBySlug,
   listCases: listCurrentUserCaseSummaries,
@@ -125,10 +130,10 @@ const toolDescriptors = [
         ...caseRefJsonSchema().properties,
         groupKey: {
           enum: [
-            "lawyer_decisions",
-            "blocking_form_work",
+            "legal_judgment",
+            "factual_completion",
             "document_updates",
-            "secondary_cleanup",
+            "operational_followup",
           ],
           type: "string",
         },
@@ -168,6 +173,19 @@ const toolDescriptors = [
       properties: {
         ...caseRefJsonSchema().properties,
         sourceDocumentRef: { pattern: "^doc_[a-f0-9]{16}$", type: "string" },
+      },
+    },
+  },
+  {
+    name: "get_matter_snapshot",
+    title: "Get matter snapshot",
+    description:
+      "Return the current operational matter state projected from review actions and document updates. Use this for broad questions about what is still active, blocked, resolved, ignored, untracked, or superseded.",
+    inputSchema: {
+      ...caseRefJsonSchema(),
+      properties: {
+        ...caseRefJsonSchema().properties,
+        includeHistory: { default: false, type: "boolean" },
       },
     },
   },
@@ -258,6 +276,7 @@ type McpRefPrefix =
   | "event"
   | "fact"
   | "issue"
+  | "operation"
   | "signal"
   | "span";
 
@@ -335,10 +354,10 @@ function mapReviewAction(action: CaseReviewActionDto) {
   return {
     actionLabel: action.actionLabel,
     actionRef: reviewActionRef(action.id),
-    assignedRole: action.assignedRole,
     blocking: action.blocking,
     kind: action.kind,
     priority: action.priority,
+    requiredCapability: action.requiredCapability,
     resolvedAt: action.resolvedAt,
     sourceSpanCount: action.sourceSpanIds.length,
     sourceSpanRefs: sourceSpanRefs(action.sourceSpanIds),
@@ -436,6 +455,22 @@ function mapOperationalSignal(signal: OperationalSignalDto) {
   };
 }
 
+function mapMatterOperation(operation: MatterOperationDto) {
+  return {
+    blocking: operation.blocking,
+    current: operation.current,
+    operationRef: opaqueRef("operation", operation.id),
+    priority: operation.priority,
+    provenanceRefCount: operation.provenanceRefs.length,
+    requiredCapability: operation.requiredCapability,
+    sourceType: operation.sourceType,
+    state: operation.state,
+    summary: operation.summary,
+    title: operation.title,
+    updatedAt: operation.updatedAt,
+  };
+}
+
 function normalizeText(value: unknown) {
   return String(value ?? "")
     .toLowerCase()
@@ -489,32 +524,32 @@ const priorityRank: Record<CaseReviewActionDto["priority"], number> = {
 
 const digestGroups = [
   {
-    audience: "lawyer",
+    audience: "legal_judgment",
     description:
-      "Conflicts or legal choices that need lawyer judgment before filing decisions are made.",
-    key: "lawyer_decisions",
-    label: "Lawyer decisions",
+      "Conflicts or legal choices that need qualified legal judgment before filing decisions are made.",
+    key: "legal_judgment",
+    label: "Legal judgment",
   },
   {
-    audience: "paralegal",
+    audience: "factual_completion",
     description:
       "Blocking form-filling or attachment work that should be completed before the case proceeds.",
-    key: "blocking_form_work",
-    label: "Blocking form-filling work",
+    key: "factual_completion",
+    label: "Factual completion",
   },
   {
-    audience: "mixed",
+    audience: "document_version_review",
     description:
       "Document revision changes that may affect what the reviewer should compare or confirm.",
     key: "document_updates",
     label: "Document updates",
   },
   {
-    audience: "paralegal",
+    audience: "operational_followup",
     description:
       "Nonblocking cleanup items that can be handled after the blocking work is understood.",
-    key: "secondary_cleanup",
-    label: "Secondary cleanup",
+    key: "operational_followup",
+    label: "Operational follow-up",
   },
 ] as const;
 
@@ -529,19 +564,23 @@ function sortReviewActions(left: CaseReviewActionDto, right: CaseReviewActionDto
 }
 
 function digestGroupKey(action: CaseReviewActionDto): DigestGroupKey {
-  if (action.kind === "conflict" || action.assignedRole === "lawyer") {
-    return "lawyer_decisions";
+  if (action.requiredCapability === "legal_judgment") {
+    return "legal_judgment";
   }
 
-  if (action.kind === "revision") {
+  if (action.requiredCapability === "document_version_review") {
     return "document_updates";
   }
 
-  if (action.blocking) {
-    return "blocking_form_work";
+  if (
+    action.requiredCapability === "factual_completion" ||
+    action.requiredCapability === "filing_preparation" ||
+    action.requiredCapability === "source_verification"
+  ) {
+    return "factual_completion";
   }
 
-  return "secondary_cleanup";
+  return "operational_followup";
 }
 
 function highestPriority(actions: CaseReviewActionDto[]) {
@@ -557,10 +596,10 @@ function highestPriority(actions: CaseReviewActionDto[]) {
 function reviewDigestItem(action: CaseReviewActionDto) {
   return {
     actionRef: reviewActionRef(action.id),
-    assignedRole: action.assignedRole,
     blocking: action.blocking,
     kind: action.kind,
     priority: action.priority,
+    requiredCapability: action.requiredCapability,
     sourceSpanCount: action.sourceSpanIds.length,
     summary: action.summary,
     title: action.title,
@@ -952,7 +991,7 @@ async function recordReviewActionEvent(input: {
         action_key,
         kind,
         priority,
-        assigned_role,
+        required_capability,
         blocking,
         status,
         title,
@@ -1038,6 +1077,7 @@ export async function executeMurdockMcpV1Tool(
       "list_case_documents",
       "get_open_review_actions",
       "get_document_updates",
+      "get_matter_snapshot",
       "get_operational_signals",
       "get_source_span",
       "search_case_evidence",
@@ -1236,6 +1276,24 @@ async function executeParsedTool(
     });
   }
 
+  if (name === "get_matter_snapshot") {
+    const parsed = murdockMcpInputSchemas.get_matter_snapshot.parse(input);
+    const workspace = await loadWorkspace(parsed, deps);
+    const snapshot = await deps.getMatterOperationalSnapshot({
+      caseId: workspace.case.id,
+      includeHistory: parsed.includeHistory,
+    });
+
+    return getMatterSnapshotOutputSchema.parse({
+      activeOperations: snapshot.activeOperations.map(mapMatterOperation),
+      case: caseSummary(workspace.case),
+      counts: snapshot.counts,
+      currentOperations: snapshot.currentOperations.map(mapMatterOperation),
+      generatedAt: snapshot.generatedAt,
+      historyIncluded: parsed.includeHistory,
+    });
+  }
+
   if (name === "get_source_span") {
     const parsed = murdockMcpInputSchemas.get_source_span.parse(input);
     const workspace = await loadWorkspace(parsed, deps);
@@ -1299,13 +1357,13 @@ function rowToReviewActionPatch(row: Record<string, unknown>) {
   return {
     actionKey: row.action_key,
     actionLabel: row.action_label,
-    assignedRole: row.assigned_role,
     blocking: row.blocking,
     caseId: row.case_id,
     createdAt: toIso(row.created_at),
     id: row.id,
     kind: row.kind,
     priority: row.priority,
+    requiredCapability: row.required_capability ?? "operational_followup",
     rawRefs: row.raw_refs,
     reducerRunId: row.reducer_run_id,
     resolvedAt: toIso(row.resolved_at),

@@ -8,23 +8,30 @@ import {
   filterCaseControlBySourceGrounding,
   type CaseControlDto,
 } from "@/lib/case-control";
+import type { CaseChatMessageDto } from "@/lib/contracts/case-chat";
 import type { CaseWorkspaceDto } from "@/lib/contracts/case-workspace";
 import type { DocumentRevisionSummaryDto } from "@/lib/contracts/document-revisions";
 import { cn } from "@/lib/utils";
 
+import {
+  CaseChatComposer,
+  CaseChatSurface,
+  useCaseChatStream,
+} from "./components/case-chat-surface";
 import { CaseControlPanel } from "./components/case-control-panel";
 import {
   CaseDocumentSwitcher,
   type CaseDocumentSwitcherItem,
 } from "./components/case-document-switcher";
 import {
-  CaseSourceSurface,
-  type CaseSourceSurfaceMode,
-} from "./components/case-source-surface";
-import { DocumentRevisionList } from "./components/document-revision-list";
+  CaseFileReviewSurface,
+  type CaseFileReviewSurfaceMode,
+} from "./components/case-file-review-surface";
 import { WorkspaceInputFooter } from "./components/workspace-input-footer";
+import { sharedWorkspaceSurfaceWidthClass } from "./components/workspace-surface";
 
 type CaseWorkspaceViewProps = {
+  initialChatMessages?: CaseChatMessageDto[];
   documentRevisions?: DocumentRevisionSummaryDto[];
   initialPreviewedSourceKey?: string;
   workspace: CaseWorkspaceDto;
@@ -53,8 +60,11 @@ const controlPanelClassByMode = {
 
 const sourceSurfaceClassByMode = {
   "source-and-control":
-    "order-2 min-h-[28rem] xl:order-1 xl:h-full xl:min-h-0 xl:w-[min(90%,84rem)] xl:max-w-full xl:justify-self-center",
-  "source-only": "order-2 w-full max-w-6xl",
+    cn(
+      "order-2 min-h-[28rem] xl:order-1 xl:h-full xl:min-h-0 xl:justify-self-center",
+      sharedWorkspaceSurfaceWidthClass,
+    ),
+  "source-only": cn("order-2", sharedWorkspaceSurfaceWidthClass),
   "control-only": "order-2 min-h-[28rem] xl:h-full xl:min-h-0",
 } satisfies Record<WorkspaceLayoutMode, string>;
 
@@ -62,10 +72,10 @@ const sourceSurfaceModeByWorkspaceMode = {
   "source-and-control": "contained",
   "source-only": "content",
   "control-only": "contained",
-} satisfies Record<WorkspaceLayoutMode, CaseSourceSurfaceMode>;
+} satisfies Record<WorkspaceLayoutMode, CaseFileReviewSurfaceMode>;
 
 const documentSwitcherWidthClass =
-  "w-80 max-w-full shrink-0 xl:w-96 2xl:w-[26rem]";
+  "w-fit max-w-full shrink-0";
 
 const workspaceHeaderClass =
   "flex shrink-0 items-start justify-between gap-6";
@@ -89,11 +99,13 @@ function previewedDocumentIdForSourceKey(
   workspace: CaseWorkspaceDto,
   sourceKey: string | undefined,
 ) {
+  if (!sourceKey) {
+    return null;
+  }
+
   return (
     workspace.sourceDocuments.find((document) => document.sourceKey === sourceKey)
-      ?.id ??
-    workspace.sourceDocuments[0]?.id ??
-    null
+      ?.id ?? null
   );
 }
 
@@ -110,11 +122,13 @@ function replacePreviewedSourceParam(sourceKey: string | null) {
 }
 
 export function CaseWorkspaceView({
+  initialChatMessages = [],
   documentRevisions = [],
   initialPreviewedSourceKey,
   workspace,
 }: CaseWorkspaceViewProps) {
   const intake = useIngestedFiles();
+  const fileReviewSurfaceRef = React.useRef<HTMLDivElement | null>(null);
   const control = buildCaseControlDto(workspace);
   const firstItemId = control.queue[0]?.id ?? null;
   const [activeReviewItemId, setActiveReviewItemId] = React.useState<string | null>(
@@ -125,12 +139,7 @@ export function CaseWorkspaceView({
     previewedDocumentIdForSourceKey(workspace, initialPreviewedSourceKey),
   );
   const previewedDocument =
-    sourceDocuments.find((document) => document.id === previewedDocumentId) ??
-    sourceDocuments.find(
-      (document) => document.sourceKey === initialPreviewedSourceKey,
-    ) ??
-    sourceDocuments[0] ??
-    null;
+    sourceDocuments.find((document) => document.id === previewedDocumentId) ?? null;
   const resolvedPreviewedDocumentId = previewedDocument?.id ?? null;
   const hasFiles = intake.files.length > 0 || sourceDocuments.length > 0;
   const previewedFile = intake.previewedFile;
@@ -138,6 +147,15 @@ export function CaseWorkspaceView({
   const previewedSourceUrl = !previewedFile && previewedDocument?.caseDocumentId
     ? `/case-documents/${previewedDocument.caseDocumentId}`
     : null;
+  const chat = useCaseChatStream({
+    caseId: workspace.case.id,
+    initialMessages: initialChatMessages,
+  });
+  const clearPreviewedSource = React.useCallback(() => {
+    setPreviewedDocumentId(null);
+    intake.onPreviewFile(null);
+    replacePreviewedSourceParam(null);
+  }, [intake]);
   const groundedControl = React.useMemo(
     () =>
       filterCaseControlBySourceGrounding(control, {
@@ -171,10 +189,16 @@ export function CaseWorkspaceView({
           id: `persisted:${document.id}`,
           isPreviewed,
           label: document.fileName,
-          onPreviewChange: () => {
-            intake.onPreviewFile(null);
-            setPreviewedDocumentId(document.id);
-            replacePreviewedSourceParam(document.sourceKey);
+          onPreviewChange: (previewed: boolean) => {
+            if (previewed) {
+              intake.onPreviewFile(null);
+              setPreviewedDocumentId(document.id);
+              replacePreviewedSourceParam(document.sourceKey);
+              return;
+            }
+
+            setPreviewedDocumentId(null);
+            replacePreviewedSourceParam(null);
           },
           variant: "persisted" as const,
         };
@@ -225,9 +249,8 @@ export function CaseWorkspaceView({
   const showControlPanel = Boolean(
     hasSourceFailure || control.activeItem,
   );
-  const showGroundedControlOverlay = Boolean(
-    showSourceSurface && groundedControl.queue.length > 0,
-  );
+  const showFilePreviewSurface = documentSwitcherItems.length > 0 && showSourceSurface;
+  const showStandaloneControlPanel = showControlPanel && documentSwitcherItems.length === 0;
   const previewedDocumentRevisions = React.useMemo(
     () =>
       documentRevisions.filter((revision) => {
@@ -242,10 +265,7 @@ export function CaseWorkspaceView({
       }),
     [documentRevisions, previewedDocument],
   );
-  const showRevisionOverlay = Boolean(
-    showSourceSurface && previewedDocumentRevisions.length > 0,
-  );
-  const showWorkspaceSurface = showControlPanel || showSourceSurface;
+  const showWorkspaceSurface = showStandaloneControlPanel || showFilePreviewSurface;
   const effectiveActiveReviewItemId = activeReviewItemIdFor(
     control,
     activeReviewItemId,
@@ -255,11 +275,51 @@ export function CaseWorkspaceView({
     activeReviewItemId,
   );
   const workspaceLayoutMode: WorkspaceLayoutMode =
-    showControlPanel && showSourceSurface
+    showControlPanel && showFilePreviewSurface
       ? "source-and-control"
-      : showControlPanel
+      : showStandaloneControlPanel
         ? "control-only"
         : "source-only";
+  React.useEffect(() => {
+    if (!showFilePreviewSurface) {
+      return;
+    }
+
+    function dismissPreviewOnOutsidePointerDown(event: PointerEvent) {
+      const target = event.target;
+
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (fileReviewSurfaceRef.current?.contains(target)) {
+        return;
+      }
+
+      if (
+        target instanceof Element &&
+        target.closest("[data-case-document-switcher]")
+      ) {
+        return;
+      }
+
+      clearPreviewedSource();
+    }
+
+    document.addEventListener(
+      "pointerdown",
+      dismissPreviewOnOutsidePointerDown,
+      { capture: true },
+    );
+
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        dismissPreviewOnOutsidePointerDown,
+        { capture: true },
+      );
+    };
+  }, [clearPreviewedSource, showFilePreviewSurface]);
 
   return (
     <div
@@ -295,7 +355,7 @@ export function CaseWorkspaceView({
               )}
               data-case-layout
             >
-              {showControlPanel && !showSourceSurface ? (
+              {showStandaloneControlPanel ? (
                 <CaseControlPanel
                   activeReviewItemId={effectiveActiveReviewItemId}
                   className={controlPanelClassByMode[workspaceLayoutMode]}
@@ -303,47 +363,46 @@ export function CaseWorkspaceView({
                   onActiveReviewItemChange={setActiveReviewItemId}
                 />
               ) : null}
-              {showSourceSurface ? (
-                <CaseSourceSurface
+              {showFilePreviewSurface ? (
+                <div
                   className={sourceSurfaceClassByMode[workspaceLayoutMode]}
-                  documentName={previewedSourceName ?? undefined}
-                  mode={sourceSurfaceModeByWorkspaceMode[workspaceLayoutMode]}
-                  overlay={
-                    showGroundedControlOverlay || showRevisionOverlay ? (
-                      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-                        {showRevisionOverlay ? (
-                          <DocumentRevisionList
-                            className="max-h-[40%] shrink-0 overflow-y-auto pr-1"
-                            revisions={previewedDocumentRevisions}
-                          />
-                        ) : null}
-                        {showGroundedControlOverlay ? (
-                          <CaseControlPanel
-                            activeReviewItemId={effectiveGroundedReviewItemId}
-                            className="min-h-0 flex-1"
-                            control={groundedControl}
-                            onActiveReviewItemChange={setActiveReviewItemId}
-                            variant="overlay"
-                          />
-                        ) : null}
-                      </div>
-                    ) : null
-                  }
-                  previewedFile={previewedFile}
-                  sourceUrl={previewedSourceUrl}
-                />
+                  ref={fileReviewSurfaceRef}
+                >
+                  <CaseFileReviewSurface
+                    activeReviewItemId={effectiveGroundedReviewItemId}
+                    control={groundedControl}
+                    documentName={previewedSourceName ?? undefined}
+                    mode={sourceSurfaceModeByWorkspaceMode[workspaceLayoutMode]}
+                    onActiveReviewItemChange={setActiveReviewItemId}
+                    previewedFile={previewedFile}
+                    revisions={previewedDocumentRevisions}
+                    sourceUrl={previewedSourceUrl}
+                  />
+                </div>
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            <CaseChatSurface
+              chat={chat}
+              className="min-h-0 flex-1"
+            />
+          )}
         </div>
       </div>
-
-      <WorkspaceInputFooter
-        caseId={workspace.case.id}
-        contextLabel="Case context input"
-        initialOperationalReady={control.footerEnabled}
-        placeholder="Ask from the current case context..."
-      />
+      <WorkspaceInputFooter initialOperationalReady={control.footerEnabled}>
+        {({ disabledReason, operationalReady }) => (
+          <CaseChatComposer
+            className="mx-auto w-full max-w-2xl"
+            disabled={!operationalReady}
+            disabledReason={disabledReason}
+            isStreaming={chat.isStreaming}
+            onSubmitMessage={(message) => {
+              clearPreviewedSource();
+              void chat.submitMessage(message);
+            }}
+          />
+        )}
+      </WorkspaceInputFooter>
     </div>
   );
 }

@@ -1,15 +1,17 @@
 "use client";
 
-import { ChatInput } from "@/components/app/chat-input";
+import * as React from "react";
+
 import { useIngestedFiles } from "@/components/app/ingested-files-context";
 import { cn } from "@/lib/utils";
 
 type WorkspaceInputFooterProps = {
-  caseId: string;
+  children: (state: {
+    disabledReason: string;
+    operationalReady: boolean;
+  }) => React.ReactNode;
   className?: string;
-  contextLabel?: string;
   initialOperationalReady: boolean;
-  placeholder?: string;
 };
 
 function isHarnessReady(status: string | undefined) {
@@ -17,15 +19,13 @@ function isHarnessReady(status: string | undefined) {
 }
 
 export function WorkspaceInputFooter({
-  caseId,
+  children,
   className,
-  contextLabel = "Matter input",
   initialOperationalReady,
-  placeholder,
 }: WorkspaceInputFooterProps) {
   const intake = useIngestedFiles();
   const includedFiles = intake.files.filter((file) =>
-    intake.includedFileIds.includes(file.id)
+    intake.includedFileIds.includes(file.id),
   );
   const operationalReady =
     includedFiles.length > 0
@@ -36,18 +36,14 @@ export function WorkspaceInputFooter({
     <footer
       className={cn(
         "flex h-20 shrink-0 items-center justify-center border-t border-paper/10 bg-ink/95 px-1",
-        className
+        className,
       )}
       data-operational-ready={operationalReady}
     >
-      <ChatInput
-        caseId={caseId}
-        className="mx-auto"
-        contextLabel={contextLabel}
-        disabledReason="Case context is not ready."
-        operationalReady={operationalReady}
-        placeholder={placeholder}
-      />
+      {children({
+        disabledReason: "Case context is not ready.",
+        operationalReady,
+      })}
     </footer>
   );
 }

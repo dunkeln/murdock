@@ -21,9 +21,9 @@ function gateForFinding(finding: Finding): ReviewGate {
       targetId: finding.id,
       targetType: "finding",
       level: "G3_hard_gate",
-      routedTo: "lawyer",
       blocking: true,
       reasonCodes: ["external_law"],
+      requiredCapability: "legal_judgment",
       reviewQuestion: "This requires analysis outside the OCR bundle. Review manually?",
     });
   }
@@ -33,9 +33,9 @@ function gateForFinding(finding: Finding): ReviewGate {
       targetId: finding.id,
       targetType: "finding",
       level: "G3_hard_gate",
-      routedTo: "lawyer",
       blocking: true,
       reasonCodes: ["no_source"],
+      requiredCapability: "source_verification",
       reviewQuestion: "This material finding has no source support. Remove, revise, or supply source?",
     });
   }
@@ -48,9 +48,9 @@ function gateForFinding(finding: Finding): ReviewGate {
       targetId: finding.id,
       targetType: "finding",
       level: "G2_targeted_review",
-      routedTo: "paralegal",
       blocking: false,
       reasonCodes: ["low_ocr"],
+      requiredCapability: "source_verification",
       reviewQuestion: "Verify the highlighted OCR span against the source image.",
     });
   }
@@ -63,9 +63,9 @@ function gateForFinding(finding: Finding): ReviewGate {
       targetId: finding.id,
       targetType: "finding",
       level: "G2_targeted_review",
-      routedTo: "paralegal",
       blocking: false,
       reasonCodes: ["missing_or_unclear"],
+      requiredCapability: "factual_completion",
       reviewQuestion: "Can this field be confirmed elsewhere in the OCR bundle?",
     });
   }
@@ -75,9 +75,9 @@ function gateForFinding(finding: Finding): ReviewGate {
       targetId: finding.id,
       targetType: "finding",
       level: "G1_passive_flag",
-      routedTo: null,
       blocking: false,
       reasonCodes: ["partial_source"],
+      requiredCapability: "source_verification",
       reviewQuestion: null,
     });
   }
@@ -86,9 +86,9 @@ function gateForFinding(finding: Finding): ReviewGate {
     targetId: finding.id,
     targetType: "finding",
     level: "G0_no_human",
-    routedTo: null,
     blocking: false,
     reasonCodes: [],
+    requiredCapability: null,
     reviewQuestion: null,
   });
 }
@@ -100,9 +100,9 @@ function gateForConflict(conflict: Conflict): ReviewGate {
     targetId: conflict.id,
     targetType: "conflict",
     level: hard ? "G3_hard_gate" : "G2_targeted_review",
-    routedTo: hard ? "lawyer" : "paralegal",
     blocking: hard,
     reasonCodes: [hard ? "material_conflict" : "source_conflict"],
+    requiredCapability: hard ? "legal_judgment" : "source_verification",
     reviewQuestion: hard
       ? "Which source controls, or should this remain unresolved?"
       : "Check whether this conflict is caused by duplicate, stale, or misread documents.",

@@ -25,16 +25,20 @@ import {
   operationalSignalTypeSchema,
 } from "@/lib/contracts/operational-signals";
 import {
+  matterOperationSourceTypeSchema,
+  matterOperationStateSchema,
+} from "@/lib/contracts/matter-operations";
+import {
   reviewActionKindSchema,
   reviewActionPrioritySchema,
-  reviewActionRoleSchema,
+  reviewActionRequiredCapabilitySchema,
 } from "@/lib/contracts/review-reducer";
 
 export const MURDOCK_MCP_VERSION = "murdock-mcp.v1";
 
 export const mcpOpaqueRefSchema = z
   .string()
-  .regex(/^(doc|span|fact|event|issue|action|claim|signal)_[a-f0-9]{16}$/);
+  .regex(/^(doc|span|fact|event|issue|action|claim|signal|operation)_[a-f0-9]{16}$/);
 
 export const murdockMcpToolNameSchema = z.enum([
   "list_cases",
@@ -44,6 +48,7 @@ export const murdockMcpToolNameSchema = z.enum([
   "get_case_review_group",
   "get_open_review_actions",
   "get_document_updates",
+  "get_matter_snapshot",
   "get_operational_signals",
   "get_source_span",
   "search_case_evidence",
@@ -117,10 +122,10 @@ export const getCaseContextInputSchema = murdockMcpCaseRefSchema.extend({
 export const mcpReviewActionSchema = z.object({
   actionLabel: z.string().min(1),
   actionRef: mcpOpaqueRefSchema,
-  assignedRole: reviewActionRoleSchema,
   blocking: z.boolean(),
   kind: reviewActionKindSchema,
   priority: reviewActionPrioritySchema,
+  requiredCapability: reviewActionRequiredCapabilitySchema,
   resolvedAt: isoDateTimeSchema.nullable(),
   sourceSpanCount: z.number().int().nonnegative(),
   sourceSpanRefs: z.array(mcpOpaqueRefSchema),
@@ -250,10 +255,10 @@ export const getCaseReviewDigestInputSchema = murdockMcpCaseRefSchema.extend({
 });
 
 export const mcpReviewDigestGroupKeySchema = z.enum([
-  "lawyer_decisions",
-  "blocking_form_work",
+  "legal_judgment",
+  "factual_completion",
   "document_updates",
-  "secondary_cleanup",
+  "operational_followup",
 ]);
 
 export const getCaseReviewGroupInputSchema = murdockMcpCaseRefSchema.extend({
@@ -263,18 +268,19 @@ export const getCaseReviewGroupInputSchema = murdockMcpCaseRefSchema.extend({
 });
 
 export const mcpReviewDigestAudienceSchema = z.enum([
-  "lawyer",
-  "paralegal",
-  "legal_ops",
+  "legal_judgment",
+  "factual_completion",
+  "document_version_review",
+  "operational_followup",
   "mixed",
 ]);
 
 export const mcpReviewDigestItemSchema = z.object({
   actionRef: mcpOpaqueRefSchema,
-  assignedRole: reviewActionRoleSchema,
   blocking: z.boolean(),
   kind: reviewActionKindSchema,
   priority: reviewActionPrioritySchema,
+  requiredCapability: reviewActionRequiredCapabilitySchema,
   sourceSpanCount: z.number().int().nonnegative(),
   summary: z.string().min(1),
   title: z.string().min(1),
@@ -368,6 +374,45 @@ export const getOperationalSignalsOutputSchema = z.object({
   ),
 });
 
+export const getMatterSnapshotInputSchema = murdockMcpCaseRefSchema.extend({
+  includeHistory: z.boolean().default(false),
+});
+
+export const mcpMatterOperationSchema = z.object({
+  blocking: z.boolean(),
+  current: z.boolean(),
+  operationRef: mcpOpaqueRefSchema,
+  priority: reviewActionPrioritySchema,
+  provenanceRefCount: z.number().int().nonnegative(),
+  requiredCapability: reviewActionRequiredCapabilitySchema,
+  sourceType: matterOperationSourceTypeSchema,
+  state: matterOperationStateSchema,
+  summary: z.string().min(1),
+  title: z.string().min(1),
+  updatedAt: isoDateTimeSchema,
+});
+
+export const getMatterSnapshotOutputSchema = z.object({
+  activeOperations: z.array(mcpMatterOperationSchema),
+  case: mcpCaseSummarySchema,
+  counts: z.object({
+    activeOperationCount: z.number().int().nonnegative(),
+    blockingActiveOperationCount: z.number().int().nonnegative(),
+    currentOperationCount: z.number().int().nonnegative(),
+    dismissedOperationCount: z.number().int().nonnegative(),
+    ignoredOperationCount: z.number().int().nonnegative(),
+    inReviewOperationCount: z.number().int().nonnegative(),
+    openOperationCount: z.number().int().nonnegative(),
+    resolvedOperationCount: z.number().int().nonnegative(),
+    supersededOperationCount: z.number().int().nonnegative(),
+    totalOperationCount: z.number().int().nonnegative(),
+    untrackedOperationCount: z.number().int().nonnegative(),
+  }),
+  currentOperations: z.array(mcpMatterOperationSchema),
+  generatedAt: isoDateTimeSchema,
+  historyIncluded: z.boolean(),
+});
+
 export const getSourceSpanInputSchema = murdockMcpCaseRefSchema.extend({
   sourceSpanRef: mcpOpaqueRefSchema,
 });
@@ -427,6 +472,7 @@ export const murdockMcpInputSchemas = {
   get_case_review_group: getCaseReviewGroupInputSchema,
   get_case_context: getCaseContextInputSchema,
   get_document_updates: getDocumentUpdatesInputSchema,
+  get_matter_snapshot: getMatterSnapshotInputSchema,
   get_open_review_actions: getOpenReviewActionsInputSchema,
   get_operational_signals: getOperationalSignalsInputSchema,
   get_source_span: getSourceSpanInputSchema,
@@ -441,6 +487,7 @@ export const murdockMcpOutputSchemas = {
   get_case_review_group: getCaseReviewGroupOutputSchema,
   get_case_context: getCaseContextOutputSchema,
   get_document_updates: getDocumentUpdatesOutputSchema,
+  get_matter_snapshot: getMatterSnapshotOutputSchema,
   get_open_review_actions: getOpenReviewActionsOutputSchema,
   get_operational_signals: getOperationalSignalsOutputSchema,
   get_source_span: getSourceSpanOutputSchema,

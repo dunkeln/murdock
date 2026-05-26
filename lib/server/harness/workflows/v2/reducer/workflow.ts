@@ -68,11 +68,11 @@ function reducerInputPayload(input: {
   return {
     reviewCandidates: input.candidates.map((candidate) => ({
       actionLabel: candidate.actionLabel,
-      assignedRole: candidate.assignedRole,
       blocking: candidate.blocking,
       candidateKey: candidate.candidateKey,
       kind: candidate.kind,
       priority: candidate.priority,
+      requiredCapability: candidate.requiredCapability,
       sourceSpanIds: candidate.sourceSpanIds,
       summary: candidate.summary,
       title: candidate.title,

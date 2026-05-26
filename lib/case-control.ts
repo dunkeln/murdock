@@ -17,8 +17,6 @@ export type CaseControlReadiness =
   | "needs_review"
   | "ready";
 
-export type CaseControlRole = "lawyer" | "paralegal" | "legal_ops" | null;
-
 export type CaseControlSourceRef = {
   docId: string;
   document: string;
@@ -32,7 +30,6 @@ export type CaseControlSourceRef = {
 export type CaseControlItemDto = {
   id: string;
   actionLabel: string;
-  assignedRole: CaseControlRole;
   blocking: boolean;
   kind: "conflict" | "revision" | "timeline" | "missing" | "source_check";
   priority: "critical" | "high" | "medium" | "low";
@@ -99,22 +96,6 @@ function issueAction(issue: CaseWorkspaceIssueDto) {
   return "Find support";
 }
 
-function issueRole(issue: CaseWorkspaceIssueDto): CaseControlRole {
-  if (
-    issue.issueType === "contradiction" ||
-    (issue.issueType === "revision_drift" && issue.severity === "high")
-  ) {
-    return "lawyer";
-  }
-  if (
-    issue.issueType === "chronology_gap" ||
-    issue.issueType === "missing_context"
-  ) {
-    return "paralegal";
-  }
-  return "legal_ops";
-}
-
 function issuePriority(issue: CaseWorkspaceIssueDto) {
   return issue.severity === "high" ? "high" : issue.severity;
 }
@@ -155,7 +136,6 @@ function toControlItem(
   return {
     id: issue.id,
     actionLabel: issueAction(issue),
-    assignedRole: issueRole(issue),
     blocking: issue.severity === "high" || issue.issueType === "contradiction",
     kind: issueKind(issue),
     priority: issuePriority(issue),
@@ -176,7 +156,6 @@ function toControlItemFromReviewAction(
   return {
     id: action.id,
     actionLabel: action.actionLabel,
-    assignedRole: action.assignedRole,
     blocking: action.blocking,
     kind: action.kind,
     priority: action.priority,

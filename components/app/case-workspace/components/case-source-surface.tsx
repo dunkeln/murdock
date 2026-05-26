@@ -5,6 +5,11 @@ import type { CSSProperties, ReactNode } from "react";
 import { PdfViewer } from "@/components/app/pdf-viewer";
 import { cn } from "@/lib/utils";
 
+import {
+  WorkspaceSurface,
+  type WorkspaceSurfaceMode,
+} from "./workspace-surface";
+
 type CaseSourceSurfaceProps = {
   className?: string;
   documentName?: string;
@@ -14,7 +19,7 @@ type CaseSourceSurfaceProps = {
   sourceUrl?: string | null;
 };
 
-export type CaseSourceSurfaceMode = "contained" | "content";
+export type CaseSourceSurfaceMode = WorkspaceSurfaceMode;
 
 const pdfStageWidthByMode = {
   contained: "70%",
@@ -48,15 +53,10 @@ export function CaseSourceSurface({
   const canRenderPdf = Boolean(previewedFile || sourceUrl);
 
   return (
-    <section
-      className={cn(
-        "flex min-w-0 max-w-full flex-col",
-        mode === "contained"
-          ? "min-h-[34rem] overflow-hidden xl:min-h-0"
-          : "h-auto items-start overflow-visible",
-        className,
-      )}
+    <WorkspaceSurface
+      className={className}
       data-case-source-surface
+      mode={mode}
     >
       <div
         className={cn(
@@ -113,6 +113,6 @@ export function CaseSourceSurface({
           </div>
         )}
       </div>
-    </section>
+    </WorkspaceSurface>
   );
 }

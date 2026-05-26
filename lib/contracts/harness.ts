@@ -5,6 +5,7 @@ import {
   documentSha256Schema,
   ocrProviderSchema,
 } from "@/lib/contracts/ocr-conversions";
+import { operationalCapabilitySchema } from "@/lib/contracts/operational-capability";
 
 export const HARNESS_VERSION = "harness.v1";
 
@@ -159,9 +160,9 @@ export const gateSchema = z.object({
     "G2_targeted_review",
     "G3_hard_gate",
   ]),
-  routedTo: z.enum(["paralegal", "lawyer", "admin"]).nullable(),
   blocking: z.boolean(),
   reasonCodes: z.array(reasonSchema),
+  requiredCapability: operationalCapabilitySchema.nullable(),
   reviewQuestion: z.string().min(1).nullable(),
 });
 
@@ -170,9 +171,9 @@ export type ReviewGate = z.infer<typeof gateSchema>;
 export const reviewResolutionSchema = z.object({
   targetId: z.string().min(1),
   resolvedBy: z.string().min(1),
-  role: z.enum(["paralegal", "lawyer", "admin"]),
   decision: z.string().min(1),
   note: z.string().min(1).nullable(),
+  requiredCapability: operationalCapabilitySchema.nullable(),
   timestamp: isoDateTimeSchema,
   auditStatus: z.enum(["resolved", "unresolved", "escalated"]),
 });

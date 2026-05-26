@@ -17,7 +17,7 @@ import {
   type ReviewActionKind,
   type ReviewActionPriority,
   type ReviewActionRawRef,
-  type ReviewActionRole,
+  type ReviewActionRequiredCapability,
   type ReviewActionStatus,
   caseReviewActionDtoSchema,
 } from "@/lib/contracts/review-reducer";
@@ -114,13 +114,13 @@ export type CaseWorkspaceIssueRow = {
 export type CaseReviewActionRow = {
   action_key: string;
   action_label: string;
-  assigned_role: Exclude<ReviewActionRole, null> | null;
   blocking: boolean;
   case_id: string;
   created_at: Date | string;
   id: string;
   kind: ReviewActionKind;
   priority: ReviewActionPriority;
+  required_capability: ReviewActionRequiredCapability | null;
   raw_refs: ReviewActionRawRef[] | string | null;
   reducer_run_id: string;
   resolved_at: DateValue;
@@ -292,7 +292,6 @@ export function toCaseReviewActionDto(
   return caseReviewActionDtoSchema.parse({
     actionKey: row.action_key,
     actionLabel: row.action_label,
-    assignedRole: row.assigned_role,
     blocking: row.blocking,
     caseId: row.case_id,
     createdAt: toIsoDateTime(row.created_at),
@@ -301,6 +300,7 @@ export function toCaseReviewActionDto(
     priority: row.priority,
     rawRefs: toRawRefs(row.raw_refs),
     reducerRunId: row.reducer_run_id,
+    requiredCapability: row.required_capability ?? "operational_followup",
     resolvedAt: toIsoDateTime(row.resolved_at),
     sourceSpanIds: toUuidArray(row.source_span_ids),
     status: row.status,

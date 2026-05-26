@@ -324,7 +324,7 @@ join (
       2,
       '3',
       'draft.deadlines.response_due',
-      'Response deadline: March 10, 2026. Assign paralegal review before filing packet.',
+      'Response deadline: March 10, 2026. Assign review before filing packet.',
       0.830,
       '2026-01-20T19:10:00Z'
     ),

@@ -202,7 +202,7 @@ async function getReviewActionRows(
         action.action_key,
         action.kind,
         action.priority,
-        action.assigned_role,
+        action.required_capability,
         action.blocking,
         action.status,
         action.title,
@@ -228,11 +228,11 @@ async function getReviewActionRows(
         action.id desc
     `;
   } catch (error) {
-    if (!isMissingReviewActionsTable(error)) {
-      throw error;
+    if (isMissingReviewActionsTable(error)) {
+      return [];
     }
 
-    return [];
+    throw error;
   }
 }
 

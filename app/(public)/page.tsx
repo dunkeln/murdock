@@ -45,7 +45,7 @@ export default function PublicHomePage() {
           </div>
 
           <div className="relative z-10 grid gap-6 text-sm text-paper/70 md:grid-cols-3">
-            <p>Built for attorney and paralegal workflows.</p>
+            <p>Built for legal case workflows.</p>
             <p>Structured around review queues, matters, and documents.</p>
             <p>Scoped as a Glade forward-deployed engineering assessment.</p>
           </div>

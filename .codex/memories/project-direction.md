@@ -128,6 +128,35 @@ The pilot must answer these questions without raw table access:
 
 If the signal ledger cannot answer those cleanly, runtime synthesis will compound ambiguity. Keep the durable layer structured and evidence-backed; keep posture synthesis freeform and runtime-scoped until the signal substrate proves useful.
 
+## Review Action Ontology Direction
+
+Decision on May 26, 2026: do not hard-code a broad legal-task ontology into reducer review actions or action events. Murdock should capture procedural signals and human dispositions without forcing legal workers to describe their work through a premature taxonomy.
+
+The reducer may suggest action options for UX clarity, but it must not resolve legal meaning or convert review notes into rigid practice-area workflow states. Human actionability is captured through an event stream, and the current state of a review action is derived from those events.
+
+Use a small control-surface enum plus open detail fields:
+
+```ts
+event_kind:
+  | "note"
+  | "decision"
+  | "handoff"
+  | "task"
+  | "state_change"
+  | "system"
+  | "other"
+
+event_code: string | null
+note: string | null
+payload: jsonb
+```
+
+Do not store redundant vague fields such as both `event_detail` and `label`. Prefer `event_code` as the stable machine-readable semantic and derive UI labels from it. If the exact text shown to the user must be preserved for audit, store it explicitly as `display_label_snapshot`, not as a generic label that can drift from the event code.
+
+This follows the Architect's Playbook pattern of a resilient catch-all enum plus detail field: the enum is for system control, filtering, and MCP/tool behavior; `event_code`, `note`, and `payload` preserve the legal worker's actual operational meaning.
+
+The durable rule is: evidence and recommendations are system-owned; disposition and legal-ops actionability are human-owned. Reducer output creates review action candidates. Human events decide whether something was resolved, deferred, escalated, dismissed, converted to a task, commented on, or reopened.
+
 ## Case Workspace UX Direction
 
 The case workspace should feel like an evolving legal matter, not a collection of AI tools. The lawyer or legal operator should see source material, quiet attention cues, and a ready/not-ready footer affordance, not harness telemetry, AG-UI event language, orchestration labels, or dashboard KPI behavior.

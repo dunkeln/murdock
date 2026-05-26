@@ -7,7 +7,7 @@ import {
   type ReviewActionKind,
   type ReviewActionPriority,
   type ReviewActionRawRef,
-  type ReviewActionRole,
+  type ReviewActionRequiredCapability,
   type ReviewReducerCandidate,
   reviewReducerCandidateSchema,
 } from "@/lib/contracts/review-reducer";
@@ -55,37 +55,67 @@ function issueAction(issue: CaseWorkspaceIssueDto) {
   return "Find support";
 }
 
-function roleFromGate(gate: ReviewGate | null): ReviewActionRole {
-  if (gate?.routedTo === "lawyer") {
-    return "lawyer";
+function capabilityFromGate(
+  gate: ReviewGate | null,
+): ReviewActionRequiredCapability | null {
+  if (!gate) {
+    return null;
   }
-  if (gate?.routedTo === "paralegal") {
-    return "paralegal";
+
+  if (
+    gate.reasonCodes.includes("external_law") ||
+    gate.reasonCodes.includes("material_conflict") ||
+    gate.requiredCapability === "legal_judgment"
+  ) {
+    return "legal_judgment";
   }
-  if (gate?.routedTo === "admin") {
-    return "legal_ops";
+
+  if (gate.requiredCapability) {
+    return gate.requiredCapability;
+  }
+
+  if (
+    gate.reasonCodes.includes("no_source") ||
+    gate.reasonCodes.includes("partial_source") ||
+    gate.reasonCodes.includes("low_ocr")
+  ) {
+    return "source_verification";
+  }
+
+  if (gate.reasonCodes.includes("missing_or_unclear")) {
+    return "factual_completion";
   }
 
   return null;
 }
 
-function issueRole(issue: CaseWorkspaceIssueDto, gate: ReviewGate | null): ReviewActionRole {
-  const gateRole = roleFromGate(gate);
+function issueCapability(
+  issue: CaseWorkspaceIssueDto,
+  gate: ReviewGate | null,
+): ReviewActionRequiredCapability {
+  const gateCapability = capabilityFromGate(gate);
 
-  if (gateRole) {
-    return gateRole;
+  if (gateCapability) {
+    return gateCapability;
   }
+
   if (issue.issueType === "contradiction") {
-    return "lawyer";
-  }
-  if (
-    issue.issueType === "chronology_gap" ||
-    issue.issueType === "missing_context"
-  ) {
-    return "paralegal";
+    return "legal_judgment";
   }
 
-  return "legal_ops";
+  if (issue.issueType === "revision_drift") {
+    return "document_version_review";
+  }
+
+  if (issue.issueType === "chronology_gap") {
+    return "timeline_management";
+  }
+
+  if (issue.issueType === "missing_context") {
+    return "factual_completion";
+  }
+
+  return "operational_followup";
 }
 
 function issuePriority(
@@ -198,7 +228,6 @@ function workspaceIssueCandidate(input: {
 
   return reviewReducerCandidateSchema.parse({
     actionLabel: issueAction(input.issue),
-    assignedRole: issueRole(input.issue, gate),
     blocking:
       input.issue.severity === "high" ||
       input.issue.issueType === "contradiction" ||
@@ -217,6 +246,7 @@ function workspaceIssueCandidate(input: {
       },
       ...refs,
     ],
+    requiredCapability: issueCapability(input.issue, gate),
     sourceSpanIds: input.issue.sourceSpanIds,
     summary:
       input.issue.description ??
@@ -246,11 +276,11 @@ function revisionCandidate(input: {
 
   return reviewReducerCandidateSchema.parse({
     actionLabel: revisionActionLabel(input.claim.changeType),
-    assignedRole: "paralegal",
     blocking: false,
     candidateKey: `revision-claim:${input.claim.id}`,
     kind: "revision",
     priority: "medium",
+    requiredCapability: "document_version_review",
     rawRefs: [
       {
         id: input.claim.id,

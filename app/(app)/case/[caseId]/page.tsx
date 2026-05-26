@@ -4,6 +4,7 @@ import {
 } from "@/components/app/case-workspace";
 import type { CaseWorkspaceDto } from "@/lib/contracts/case-workspace";
 import { getCurrentUserCaseWorkspaceBySlug } from "@/lib/server/case-workspace/service";
+import { loadCurrentUserCaseChat } from "@/lib/server/case-chat/service";
 import { getHarnessSourceRunStateByCase } from "@/lib/server/harness/persistence/repository";
 import { getDocumentRevisionSummariesByCaseId } from "@/lib/server/revisions/repository";
 import { shapeCurrentUserWorkspaceFromOcr } from "@/lib/server/workflows/shape/action";
@@ -111,10 +112,14 @@ export default async function CaseDetailPage({
   const documentRevisions = await getDocumentRevisionSummariesByCaseId({
     caseId: result.workspace.case.id,
   });
+  const chat = await loadCurrentUserCaseChat({
+    caseId: result.workspace.case.id,
+  });
 
   return (
     <CaseWorkspaceView
       documentRevisions={documentRevisions}
+      initialChatMessages={chat.ok ? chat.messages : []}
       initialPreviewedSourceKey={previewedSourceKey}
       workspace={result.workspace}
     />

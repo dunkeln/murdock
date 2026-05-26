@@ -45,7 +45,7 @@ create table if not exists public.case_review_actions (
   action_key text not null,
   kind text not null,
   priority text not null,
-  assigned_role text null,
+  required_capability text not null default 'operational_followup',
   blocking boolean not null default false,
   status text not null default 'open',
   title text not null,
@@ -66,8 +66,16 @@ create table if not exists public.case_review_actions (
   constraint case_review_actions_priority_check check (
     priority in ('critical', 'high', 'medium', 'low')
   ),
-  constraint case_review_actions_role_check check (
-    assigned_role is null or assigned_role in ('lawyer', 'paralegal', 'legal_ops')
+  constraint case_review_actions_required_capability_check check (
+    required_capability in (
+      'factual_completion',
+      'source_verification',
+      'legal_judgment',
+      'filing_preparation',
+      'document_version_review',
+      'timeline_management',
+      'operational_followup'
+    )
   ),
   constraint case_review_actions_status_check check (
     status in ('open', 'resolved', 'dismissed')
@@ -81,6 +89,15 @@ create index if not exists case_review_actions_run_status_idx
 
 create index if not exists case_review_actions_case_status_idx
   on public.case_review_actions (case_id, status, priority, updated_at desc);
+
+create index if not exists case_review_actions_case_capability_status_idx
+  on public.case_review_actions (
+    case_id,
+    required_capability,
+    status,
+    priority,
+    updated_at desc
+  );
 
 create table if not exists public.case_review_action_events (
   id uuid primary key default gen_random_uuid(),

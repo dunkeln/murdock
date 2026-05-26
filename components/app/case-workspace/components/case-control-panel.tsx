@@ -209,7 +209,7 @@ export function CaseControlPanel({
                           <span
                             className={cn(
                               "block font-heading uppercase leading-tight text-current",
-                              isOverlay ? "text-sm" : "text-base",
+                              isOverlay ? "text-xs" : "text-base",
                             )}
                           >
                             {item.title}
@@ -218,7 +218,9 @@ export function CaseControlPanel({
                             <span
                               className={cn(
                                 "mt-1 block text-current/65",
-                                isOverlay ? "text-xs leading-5" : "text-sm leading-6",
+                                isOverlay
+                                  ? "text-[0.6875rem] leading-4"
+                                  : "text-sm leading-6",
                               )}
                             >
                               {item.summary}

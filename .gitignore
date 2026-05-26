@@ -86,6 +86,7 @@ yarn-error.log*
 next-env.d.ts
 
 # local databases and large binary artifacts
+/db
 /db/data/
 /db/local/
 /db/tmp/
@@ -94,8 +95,6 @@ next-env.d.ts
 /db/*.db
 /db/*.dump
 /db/*.bak
-!/db/migrations/
-!/db/migrations/**
 /database/
 /data/
 /storage/
@@ -133,6 +132,7 @@ next-env.d.ts
 /*.local.md
 /*-notes.md
 /*_notes.md
+/ONTOLOGY.md
 
 # local agent state and memories
 /.codex/
