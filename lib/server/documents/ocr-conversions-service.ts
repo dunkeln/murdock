@@ -5,7 +5,11 @@ import {
   type OcrConversionDto,
   ensureOcrConversionInputSchema,
 } from "@/lib/contracts/ocr-conversions";
-import { MISTRAL_OCR_MODEL, uploadAndOcrDocument } from "@/lib/server/adapters/mistral";
+import {
+  MISTRAL_OCR_MODEL,
+  uploadAndAnnotateDocumentForHarnessV2,
+  uploadAndOcrDocument,
+} from "@/lib/server/adapters/mistral";
 import { getCurrentUser } from "@/lib/server/auth/current-user";
 import { sha256Hex, toUint8Array } from "@/lib/server/documents/content";
 import {
@@ -41,10 +45,21 @@ function isReadyAndFresh(conversion: OcrConversionDto): boolean {
   );
 }
 
+function isReadyForSelectedWorkflow(conversion: OcrConversionDto): boolean {
+  return (
+    isReadyAndFresh(conversion) &&
+    (!shouldUseHarnessV2Annotations() || conversion.documentAnnotation !== null)
+  );
+}
+
 function getFileExtension(fileName: string) {
   const extension = fileName.split(".").pop();
 
   return extension && extension !== fileName ? extension.toLowerCase() : "none";
+}
+
+function shouldUseHarnessV2Annotations() {
+  return process.env.HARNESS_WORKFLOW_VERSION === "v2";
 }
 
 export async function ensureCurrentFirmMistralOcrConversion(
@@ -105,6 +120,9 @@ export async function ensureCurrentFirmMistralOcrConversion(
           output: (conversion) => ({
             found: Boolean(conversion),
             fresh: conversion ? isReadyAndFresh(conversion) : false,
+            readyForSelectedWorkflow: conversion
+              ? isReadyForSelectedWorkflow(conversion)
+              : false,
             status: conversion?.status ?? null,
           }),
         },
@@ -117,7 +135,7 @@ export async function ensureCurrentFirmMistralOcrConversion(
           })
       );
 
-      if (existingConversion && isReadyAndFresh(existingConversion)) {
+      if (existingConversion && isReadyForSelectedWorkflow(existingConversion)) {
         return {
           conversion: existingConversion,
           source: "cache",
@@ -176,6 +194,7 @@ export async function ensureCurrentFirmMistralOcrConversion(
             documentSha256,
             provider: OCR_PROVIDER,
             providerModel: MISTRAL_OCR_MODEL,
+            requiresDocumentAnnotation: shouldUseHarnessV2Annotations(),
           })
       );
 
@@ -275,7 +294,9 @@ async function processOcrConversion(input: {
           }),
         },
         () =>
-          uploadAndOcrDocument({
+          (shouldUseHarnessV2Annotations()
+            ? uploadAndAnnotateDocumentForHarnessV2
+            : uploadAndOcrDocument)({
             fileName: input.fileName,
             content: input.content,
           })
@@ -333,6 +354,7 @@ async function processOcrConversion(input: {
         () =>
           markOcrConversionReady({
             conversionId: input.conversion.id,
+            documentAnnotation: ocrResult.data.documentAnnotation,
             markdown: ocrResult.data.markdown,
             pagesProcessed: ocrResult.data.usage.pagesProcessed,
           })

@@ -38,6 +38,7 @@ function jsonb(value: unknown) {
 
 export async function getHarnessSourceRunStateByCase(input: {
   caseId: string;
+  harnessVersion?: string;
   sourceKeys: readonly string[];
 }) {
   const sql = createNeonSql();
@@ -57,7 +58,7 @@ export async function getHarnessSourceRunStateByCase(input: {
       bool_or(hr.status = 'running') as has_running_run,
       count(*) filter (where hr.status = 'failed') as failed_run_count,
       bool_or(
-        hr.harness_version = ${HARNESS_VERSION}
+        hr.harness_version = ${input.harnessVersion ?? HARNESS_VERSION}
         and hr.status in ('ready', 'needs_review')
         and hr.final_status in ('ready', 'needs_review')
       ) as has_completed_run
@@ -126,6 +127,7 @@ export async function startHarnessRun(input: {
   caseId: string;
   fileCount: number;
   firmId: string;
+  harnessVersion?: string;
   runId: string;
   workflowName?: string;
 }) {
@@ -146,7 +148,7 @@ export async function startHarnessRun(input: {
       ${input.runId},
       ${input.caseId},
       ${input.firmId},
-      ${HARNESS_VERSION},
+      ${input.harnessVersion ?? HARNESS_VERSION},
       ${input.workflowName ?? "workspace.shape-from-ocr"},
       'running',
       ${input.fileCount},

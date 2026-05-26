@@ -5,15 +5,20 @@ import {
 import type { CaseWorkspaceDto } from "@/lib/contracts/case-workspace";
 import { getCurrentUserCaseWorkspaceBySlug } from "@/lib/server/case-workspace/service";
 import { getHarnessSourceRunStateByCase } from "@/lib/server/harness/persistence/repository";
+import { getDocumentRevisionSummariesByCaseId } from "@/lib/server/revisions/repository";
 import { shapeCurrentUserWorkspaceFromOcr } from "@/lib/server/workflows/shape/action";
 import {
   maxAutoHarnessFailedRuns,
   partitionSourcesByHarnessState,
 } from "@/lib/server/workflows/shape/source-selection";
+import { selectedHarnessVersion } from "@/lib/server/workflows/shape/version";
 
 type CaseDetailPageProps = {
   params: Promise<{
     caseId: string;
+  }>;
+  searchParams?: Promise<{
+    source?: string | string[];
   }>;
 };
 
@@ -41,6 +46,7 @@ async function eagerRunHarnessForReadyDocuments(workspace: CaseWorkspaceDto) {
 
   const harnessState = await getHarnessSourceRunStateByCase({
     caseId: workspace.case.id,
+    harnessVersion: selectedHarnessVersion(),
     sourceKeys: readySources.map((source) => source.sourceKey),
   });
   const { sourcesToShape } = partitionSourcesByHarnessState(
@@ -65,8 +71,17 @@ async function eagerRunHarnessForReadyDocuments(workspace: CaseWorkspaceDto) {
   return true;
 }
 
-export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function CaseDetailPage({
+  params,
+  searchParams,
+}: CaseDetailPageProps) {
   const { caseId } = await params;
+  const resolvedSearchParams = await searchParams;
+  const previewedSourceKey = firstSearchParam(resolvedSearchParams?.source);
   let result = await getCurrentUserCaseWorkspaceBySlug(caseId);
 
   if (!result.ok) {
@@ -93,5 +108,15 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
     }
   }
 
-  return <CaseWorkspaceView workspace={result.workspace} />;
+  const documentRevisions = await getDocumentRevisionSummariesByCaseId({
+    caseId: result.workspace.case.id,
+  });
+
+  return (
+    <CaseWorkspaceView
+      documentRevisions={documentRevisions}
+      initialPreviewedSourceKey={previewedSourceKey}
+      workspace={result.workspace}
+    />
+  );
 }

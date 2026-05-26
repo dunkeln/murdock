@@ -15,6 +15,7 @@ type OcrConversionRow = {
   provider_model: string;
   status: OcrConversionStatus;
   markdown: string | null;
+  document_annotation: unknown | null;
   pages_processed: number | null;
   error_message: string | null;
   expires_at: Date | string;
@@ -40,6 +41,7 @@ function toOcrConversionDto(row: OcrConversionRow): OcrConversionDto {
     providerModel: row.provider_model,
     status: row.status,
     markdown: row.markdown,
+    documentAnnotation: row.document_annotation,
     pagesProcessed: row.pages_processed,
     errorMessage: row.error_message,
     expiresAt: toIsoDateTime(row.expires_at),
@@ -65,6 +67,7 @@ export async function getActiveOcrConversion(input: {
       provider_model,
       status,
       markdown,
+      document_annotation,
       pages_processed,
       error_message,
       expires_at,
@@ -102,6 +105,7 @@ export async function getOcrConversionsByFirmAndIds(input: {
       provider_model,
       status,
       markdown,
+      document_annotation,
       pages_processed,
       error_message,
       expires_at,
@@ -133,6 +137,7 @@ export async function insertProcessingOcrConversion(input: {
       provider_model,
       status,
       markdown,
+      document_annotation,
       pages_processed,
       error_message,
       expires_at
@@ -143,6 +148,7 @@ export async function insertProcessingOcrConversion(input: {
       ${input.provider},
       ${input.providerModel},
       'processing',
+      null,
       null,
       null,
       null,
@@ -164,6 +170,7 @@ export async function insertProcessingOcrConversion(input: {
       provider_model,
       status,
       markdown,
+      document_annotation,
       pages_processed,
       error_message,
       expires_at,
@@ -181,6 +188,7 @@ export async function claimRefreshableOcrConversion(input: {
   firmId: string;
   provider: "mistral";
   providerModel: string;
+  requiresDocumentAnnotation?: boolean;
 }): Promise<OcrConversionDto | null> {
   const sql = createNeonSql();
   const rows = await sql`
@@ -188,6 +196,7 @@ export async function claimRefreshableOcrConversion(input: {
     set
       status = 'processing',
       markdown = null,
+      document_annotation = null,
       pages_processed = null,
       error_message = null,
       expires_at = now() + interval '2 days',
@@ -200,6 +209,12 @@ export async function claimRefreshableOcrConversion(input: {
       and (
         status = 'pending'
         or (status = 'ready' and markdown is null)
+        or (
+          ${Boolean(input.requiresDocumentAnnotation)}
+          and status = 'ready'
+          and markdown is not null
+          and document_annotation is null
+        )
         or expires_at <= now()
       )
     returning
@@ -210,6 +225,7 @@ export async function claimRefreshableOcrConversion(input: {
       provider_model,
       status,
       markdown,
+      document_annotation,
       pages_processed,
       error_message,
       expires_at,
@@ -224,6 +240,7 @@ export async function claimRefreshableOcrConversion(input: {
 
 export async function markOcrConversionReady(input: {
   conversionId: string;
+  documentAnnotation?: unknown | null;
   markdown: string;
   pagesProcessed: number;
 }): Promise<OcrConversionDto> {
@@ -233,6 +250,7 @@ export async function markOcrConversionReady(input: {
     set
       status = 'ready',
       markdown = ${input.markdown},
+      document_annotation = ${input.documentAnnotation ? JSON.stringify(input.documentAnnotation) : null}::jsonb,
       pages_processed = ${input.pagesProcessed},
       error_message = null,
       expires_at = now() + interval '2 days',
@@ -247,6 +265,7 @@ export async function markOcrConversionReady(input: {
       provider_model,
       status,
       markdown,
+      document_annotation,
       pages_processed,
       error_message,
       expires_at,
@@ -269,6 +288,7 @@ export async function markOcrConversionFailed(input: {
     set
       status = 'failed',
       markdown = null,
+      document_annotation = null,
       pages_processed = null,
       error_message = ${input.errorMessage},
       expires_at = now() + interval '5 seconds',
@@ -283,6 +303,7 @@ export async function markOcrConversionFailed(input: {
       provider_model,
       status,
       markdown,
+      document_annotation,
       pages_processed,
       error_message,
       expires_at,

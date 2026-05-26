@@ -10,13 +10,13 @@ import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
 
 const fileRowClass =
-  "h-8 w-full min-w-0 overflow-hidden border border-paper/15 px-2.5 text-sm leading-none text-paper transition-colors hover:!border-paper hover:!bg-paper hover:!text-ink hover:[&_*]:!text-ink hover:[&_svg]:!text-ink";
+  "h-8 w-full min-w-0 overflow-hidden border border-paper/15 px-2.5 text-sm leading-none text-paper transition-colors hover:border-paper hover:bg-paper hover:text-ink";
 const previewedFileRowClass =
-  "!border-paper !bg-paper !text-ink [&_*]:!text-ink [&_svg]:!text-ink hover:!border-paper hover:!bg-paper hover:!text-ink";
+  "border-paper bg-paper text-ink hover:border-paper hover:bg-paper hover:text-ink";
 const fileRowTextClass = "block min-w-0 flex-1 truncate leading-none";
 const fileRowIconBoxClass =
-  "grid size-3 shrink-0 place-items-center overflow-hidden";
-const fileRowIconClass = "size-3 shrink-0";
+  "grid size-4 shrink-0 place-items-center overflow-hidden";
+const fileRowIconClass = "size-4 shrink-0 text-current";
 const transparentCheckboxClass =
   "size-3.5 rounded-none !border-transparent !bg-transparent text-current after:hidden hover:!bg-transparent data-checked:!border-transparent data-checked:!bg-transparent data-checked:!text-current [&_svg]:size-3";
 const iconButtonClass =
@@ -77,7 +77,7 @@ function CaseDocumentRow({ item }: { item: CaseDocumentSwitcherItem }) {
     <div
       className={cn(
         fileRowClass,
-        "grid grid-cols-[0.875rem_minmax(0,1fr)_0.875rem] items-center gap-2",
+        "grid grid-cols-[0.875rem_1rem_minmax(0,1fr)_0.875rem] items-center gap-2",
         item.isPreviewed && previewedFileRowClass,
       )}
     >
@@ -87,6 +87,7 @@ function CaseDocumentRow({ item }: { item: CaseDocumentSwitcherItem }) {
         className={transparentCheckboxClass}
         onCheckedChange={(checked) => item.onIncludeChange?.(Boolean(checked))}
       />
+      <FileRowIcon />
       <Toggle
         aria-label={`Open ${item.label}`}
         className="h-auto max-w-full min-w-0 justify-start overflow-hidden rounded-none border-0 bg-transparent p-0 text-current hover:!bg-transparent hover:!text-current aria-pressed:!bg-transparent has-data-[icon=inline-start]:pl-0"

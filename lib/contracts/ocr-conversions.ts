@@ -27,6 +27,7 @@ export const ocrConversionDtoSchema = z.object({
   providerModel: z.string().min(1),
   status: ocrConversionStatusSchema,
   markdown: z.string().nullable(),
+  documentAnnotation: z.unknown().nullable().default(null),
   pagesProcessed: z.number().int().nonnegative().nullable(),
   errorMessage: z.string().nullable(),
   expiresAt: isoDateTimeSchema,

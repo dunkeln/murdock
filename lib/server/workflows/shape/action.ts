@@ -2,7 +2,9 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { HARNESS_VERSION } from "@/lib/contracts/harness";
+import { harnessErrorSchema } from "@/lib/contracts/harness";
+import { HARNESS_V2_VERSION } from "@/lib/contracts/harness-v2";
+import type { DocumentRevisionSummaryDto } from "@/lib/contracts/document-revisions";
 import { getCurrentUser } from "@/lib/server/auth/current-user";
 import { getCaseSummaryByUserAndId } from "@/lib/server/cases/repository";
 import { getCurrentUserCaseWorkspaceById } from "@/lib/server/case-workspace/service";
@@ -26,6 +28,9 @@ import {
   type HarnessBundleResult,
   type SourceInput,
 } from "@/lib/server/workflows/shape/project";
+import { reduceHarnessV2ReviewActions } from "@/lib/server/harness/workflows/v2/reducer";
+import { getDocumentRevisionSummariesByCaseId } from "@/lib/server/revisions/repository";
+import { generateDocumentRevisionsForWorkspace } from "@/lib/server/revisions/workflow";
 import {
   errorSchema,
   getSourceKey,
@@ -36,6 +41,7 @@ import {
   type ShapeResult,
 } from "@/lib/server/workflows/shape/schema";
 import { partitionSourcesByHarnessState } from "@/lib/server/workflows/shape/source-selection";
+import { selectedHarnessVersion } from "@/lib/server/workflows/shape/version";
 
 function threadId(caseId: string) {
   return `case:${caseId}:workspace-control`;
@@ -62,6 +68,7 @@ function fail(input: {
 
 function runStats(input: {
   bundles: HarnessBundleResult[];
+  reviewReducer?: Record<string, unknown> | null;
   shapeIssueCount?: number;
   sourceCount: number;
 }) {
@@ -88,6 +95,7 @@ function runStats(input: {
       0,
     ),
     workspaceIssueCount: input.shapeIssueCount ?? null,
+    reviewReducer: input.reviewReducer ?? null,
   };
 }
 
@@ -97,7 +105,7 @@ function runBundleArtifact(bundles: HarnessBundleResult[]) {
       bundle: result.bundle,
       sourceKey: result.source.sourceKey,
     })),
-    version: HARNESS_VERSION,
+    version: selectedHarnessVersion(),
   };
 }
 
@@ -118,6 +126,39 @@ function sameOrMixed(values: string[]) {
   const uniqueValues = [...new Set(values)];
 
   return uniqueValues.length === 1 ? uniqueValues[0]! : "mixed";
+}
+
+function toReducerStepError(error: unknown) {
+  const message = error instanceof Error
+    ? error.message.slice(0, 500)
+    : "Review reducer failed unexpectedly.";
+
+  return harnessErrorSchema.parse({
+    isError: true,
+    errorCategory: "unknown",
+    isRetryable: true,
+    message,
+    provider: null,
+  });
+}
+
+function filterRevisionSummariesForSources(input: {
+  records: Awaited<ReturnType<typeof persistShape>>;
+  revisionSummaries: DocumentRevisionSummaryDto[];
+  sourceKeys: string[];
+}) {
+  const sourceKeys = new Set(input.sourceKeys);
+  const sourceDocumentIds = new Set(
+    input.records.sourceDocuments
+      .filter((document) => sourceKeys.has(document.sourceKey))
+      .map((document) => document.id),
+  );
+
+  return input.revisionSummaries.filter(
+    (summary) =>
+      sourceDocumentIds.has(summary.fromSourceDocumentId) ||
+      sourceDocumentIds.has(summary.toSourceDocumentId),
+  );
 }
 
 export async function shapeCurrentUserWorkspaceFromOcr(
@@ -235,6 +276,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
         );
         const harnessSourceState = await getHarnessSourceRunStateByCase({
           caseId: parsed.caseId,
+          harnessVersion: selectedHarnessVersion(),
           sourceKeys: sources.map((source) => source.sourceKey),
         });
         const { runningSources, sourcesToShape } = partitionSourcesByHarnessState(
@@ -301,6 +343,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
           caseId: parsed.caseId,
           fileCount: claimedSourcesToShape.length,
           firmId: user.firmId,
+          harnessVersion: selectedHarnessVersion(),
           runId,
         });
         harnessRunStarted = true;
@@ -384,11 +427,110 @@ export async function shapeCurrentUserWorkspaceFromOcr(
           },
         });
 
-        await persistShape({
+        const persistedRecords = await persistShape({
           caseId: parsed.caseId,
           shape: shapeResult.shape,
           sources: claimedSourcesToShape,
         });
+        let revisionSummaries: DocumentRevisionSummaryDto[] = [];
+        let reviewReducerStats: Record<string, unknown> | null = null;
+
+        try {
+          await generateDocumentRevisionsForWorkspace({
+            caseId: parsed.caseId,
+            sourceKeys: claimedSourcesToShape.map((source) => source.sourceKey),
+            workspace: persistedRecords,
+          });
+          revisionSummaries = await getDocumentRevisionSummariesByCaseId({
+            caseId: parsed.caseId,
+          });
+          revisionSummaries = filterRevisionSummariesForSources({
+            records: persistedRecords,
+            revisionSummaries,
+            sourceKeys: claimedSourcesToShape.map((source) => source.sourceKey),
+          });
+        } catch {
+          // Revision candidates are a post-persistence branch and must not fail shaping.
+        }
+
+        if (selectedHarnessVersion() === HARNESS_V2_VERSION) {
+          const reducerOrdinal = 1100;
+          const reducerStepName = "review-reducer";
+
+          try {
+            await recordHarnessRunStepStarted({
+              caseId: parsed.caseId,
+              ordinal: reducerOrdinal,
+              runId,
+              sourceKey: null,
+              stepName: reducerStepName,
+            });
+            const reducerResult = await reduceHarnessV2ReviewActions({
+              bundles: shapeResult.bundles,
+              caseId: parsed.caseId,
+              harnessRunId: runId,
+              records: persistedRecords,
+              revisionSummaries,
+            });
+
+            reviewReducerStats = {
+              actionCount: reducerResult.actions.length,
+              candidateCount: reducerResult.candidateCount,
+              fallback: reducerResult.fallback,
+              reducerRunId: reducerResult.reducerRunId,
+              status: reducerResult.status,
+              validationErrorCount: reducerResult.validationErrors.length,
+            };
+            await recordHarnessRunArtifact({
+              artifact: {
+                actions: reducerResult.actions,
+                validationErrors: reducerResult.validationErrors,
+              },
+              caseId: parsed.caseId,
+              kind: "v2_review_reducer",
+              ordinal: reducerOrdinal,
+              runId,
+              sourceKey: null,
+              status: "succeeded",
+              stepName: reducerStepName,
+              summary: reviewReducerStats,
+            });
+            await recordHarnessRunStepFinished({
+              caseId: parsed.caseId,
+              error: null,
+              metrics: reviewReducerStats,
+              ordinal: reducerOrdinal,
+              runId,
+              sourceKey: null,
+              status: "succeeded",
+              stepName: reducerStepName,
+            });
+          } catch (error) {
+            const reducerError = toReducerStepError(error);
+
+            reviewReducerStats = {
+              errorCategory: reducerError.errorCategory,
+              fallback: false,
+              status: "failed",
+            };
+
+            try {
+              await recordHarnessRunStepFinished({
+                caseId: parsed.caseId,
+                error: reducerError,
+                metrics: reviewReducerStats,
+                ordinal: reducerOrdinal,
+                runId,
+                sourceKey: null,
+                status: "failed",
+                stepName: reducerStepName,
+              });
+            } catch {
+              // Reducer failure is audit-relevant but must not block workspace readiness.
+            }
+          }
+        }
+
         const workspace = await getCurrentUserCaseWorkspaceById(parsed.caseId);
 
         if (!workspace.ok) {
@@ -414,6 +556,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
             runId,
             stats: runStats({
               bundles: shapeResult.bundles,
+              reviewReducer: reviewReducerStats,
               shapeIssueCount: shapeResult.shape.issues.length,
               sourceCount: claimedSourcesToShape.length,
             }),
@@ -435,6 +578,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
           runId,
           stats: runStats({
             bundles: shapeResult.bundles,
+            reviewReducer: reviewReducerStats,
             shapeIssueCount: shapeResult.shape.issues.length,
             sourceCount: claimedSourcesToShape.length,
           }),

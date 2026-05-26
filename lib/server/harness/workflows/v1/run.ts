@@ -46,6 +46,8 @@ export type HarnessRunArtifactKind =
   | "source_map"
   | "quality_findings"
   | "segments"
+  | "v2_document_annotation"
+  | "v2_review_reducer"
   | "extracted_findings"
   | "bundle"
   | "error";
@@ -396,6 +398,7 @@ export async function runHarnessFromConversion(input: RunConversionInput) {
     fileName: doc.fileName,
     ocrConversionId: doc.ocrConversionId,
     ocrResult: {
+      documentAnnotation: null,
       markdown: source.fullText,
       model: doc.providerModel,
       pages: source.pages.map((page) => ({

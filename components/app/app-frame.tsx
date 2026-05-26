@@ -25,10 +25,6 @@ import {
 } from "@/app/(app)/actions";
 import type { IngestedFileItem } from "@/components/app/ingested-file-types";
 import { IngestedFilesProvider } from "@/components/app/ingested-files-context";
-import {
-  CaseDocumentSwitcher,
-  type CaseDocumentSwitcherItem,
-} from "@/components/app/case-workspace/components/case-document-switcher";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -295,7 +291,6 @@ function EditableCaseLink({
 export function AppFrame({ cases, children }: AppFrameProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const caseWorkspaceOwnsFiles = pathname.startsWith("/case/");
   const [isCreatingCase, startCreateCaseTransition] = React.useTransition();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
   const [deletingCaseId, setDeletingCaseId] = React.useState<string | null>(
@@ -329,18 +324,6 @@ export function AppFrame({ cases, children }: AppFrameProps) {
     includedFileIdsRef.current = fileIds;
     setIncludedFileIds(fileIds);
   }, []);
-
-  const changeFileInclusion = React.useCallback(
-    (fileId: string, included: boolean) => {
-      const currentIds = includedFileIdsRef.current;
-      const nextIds = included
-        ? Array.from(new Set([...currentIds, fileId]))
-        : currentIds.filter((id) => id !== fileId);
-
-      changeIncludedFileIds(nextIds);
-    },
-    [changeIncludedFileIds]
-  );
 
   const updateIngestedFile = React.useCallback(
     (fileId: string, patch: Partial<IngestedFileItem>) => {
@@ -646,29 +629,6 @@ export function AppFrame({ cases, children }: AppFrameProps) {
     [ingestedFiles]
   );
 
-  const documentSwitcherItems = React.useMemo<CaseDocumentSwitcherItem[]>(
-    () =>
-      ingestedFiles.map((item) => ({
-        id: `transient:${item.id}`,
-        isIncluded: includedFileIds.includes(item.id),
-        isPreviewed: previewedFileId === item.id,
-        label: item.fileName,
-        onDelete: () => deleteIngestedFile(item.id),
-        onIncludeChange: (included: boolean) =>
-          changeFileInclusion(item.id, included),
-        onPreviewChange: (previewed: boolean) =>
-          setPreviewedFileId(previewed ? item.id : null),
-        variant: "transient" as const,
-      })),
-    [
-      changeFileInclusion,
-      deleteIngestedFile,
-      includedFileIds,
-      ingestedFiles,
-      previewedFileId,
-    ]
-  );
-
   const ingestedFilesContextValue = React.useMemo(
     () => ({
       includedFileIds,
@@ -828,18 +788,8 @@ export function AppFrame({ cases, children }: AppFrameProps) {
 
         <IngestedFilesProvider value={ingestedFilesContextValue}>
           <div className="flex h-full min-h-0 flex-col overflow-hidden px-8 pb-0 pt-8">
-            <div
-              className={cn(
-                "grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden",
-                ingestedFiles.length > 0 &&
-                  !caseWorkspaceOwnsFiles &&
-                  "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]"
-              )}
-            >
+            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden">
               <div className="h-full min-h-0 min-w-0">{children}</div>
-              {caseWorkspaceOwnsFiles ? null : (
-                <CaseDocumentSwitcher items={documentSwitcherItems} />
-              )}
             </div>
           </div>
         </IngestedFilesProvider>

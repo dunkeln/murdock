@@ -7,6 +7,7 @@ import type {
   CaseWorkspaceIssueDto,
   CaseWorkspaceSourceSpanDto,
 } from "@/lib/contracts/case-workspace";
+import type { CaseReviewActionDto } from "@/lib/contracts/review-reducer";
 import { buildHarnessReflection } from "@/lib/harness-reflection";
 
 export type CaseControlReadiness =
@@ -63,8 +64,6 @@ export type CaseControlDto = {
 export type CaseControlSourceGrounding = {
   docId: string | null;
   fileName: string | null;
-  pageIndex: number | null;
-  spanIds: ReadonlySet<string>;
 };
 
 const priorityLabels = {
@@ -121,11 +120,11 @@ function issuePriority(issue: CaseWorkspaceIssueDto) {
 }
 
 function findSourceRefs(
-  issue: CaseWorkspaceIssueDto,
+  sourceSpanIds: string[],
   spans: Map<string, CaseWorkspaceSourceSpanDto>,
   docs: Map<string, { fileName: string; title: string }>,
 ): CaseControlSourceRef[] {
-  return issue.sourceSpanIds.slice(0, 2).flatMap((spanId) => {
+  return sourceSpanIds.slice(0, 2).flatMap((spanId) => {
     const span = spans.get(spanId);
 
     if (!span) {
@@ -160,12 +159,30 @@ function toControlItem(
     blocking: issue.severity === "high" || issue.issueType === "contradiction",
     kind: issueKind(issue),
     priority: issuePriority(issue),
-    sourceRefs: findSourceRefs(issue, spans, docs),
+    sourceRefs: findSourceRefs(issue.sourceSpanIds, spans, docs),
     summary:
       issue.description ??
       issue.provenanceSummary ??
       caseWorkspaceIssueTypeLabels[issue.issueType],
     title: issue.title,
+  };
+}
+
+function toControlItemFromReviewAction(
+  action: CaseReviewActionDto,
+  spans: Map<string, CaseWorkspaceSourceSpanDto>,
+  docs: Map<string, { fileName: string; title: string }>,
+): CaseControlItemDto {
+  return {
+    id: action.id,
+    actionLabel: action.actionLabel,
+    assignedRole: action.assignedRole,
+    blocking: action.blocking,
+    kind: action.kind,
+    priority: action.priority,
+    sourceRefs: findSourceRefs(action.sourceSpanIds, spans, docs),
+    summary: action.summary,
+    title: action.title,
   };
 }
 
@@ -178,18 +195,44 @@ function compareIssues(left: CaseWorkspaceIssueDto, right: CaseWorkspaceIssueDto
   );
 }
 
+const reviewActionPriorityRank = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+} satisfies Record<CaseReviewActionDto["priority"], number>;
+
+function compareReviewActions(
+  left: CaseReviewActionDto,
+  right: CaseReviewActionDto,
+) {
+  return (
+    reviewActionPriorityRank[left.priority] -
+      reviewActionPriorityRank[right.priority] ||
+    Number(right.blocking) - Number(left.blocking) ||
+    right.updatedAt.localeCompare(left.updatedAt) ||
+    left.title.localeCompare(right.title)
+  );
+}
+
 function sourceRefMatchesGrounding(
   sourceRef: CaseControlSourceRef,
   grounding: CaseControlSourceGrounding,
 ) {
   return (
-    grounding.docId !== null &&
-    grounding.fileName !== null &&
-    grounding.pageIndex !== null &&
-    sourceRef.docId === grounding.docId &&
-    sourceRef.fileName === grounding.fileName &&
-    sourceRef.pageIndex === grounding.pageIndex &&
-    grounding.spanIds.has(sourceRef.spanId)
+    (grounding.docId !== null && sourceRef.docId === grounding.docId) ||
+    (grounding.fileName !== null && sourceRef.fileName === grounding.fileName)
+  );
+}
+
+function compareSourceRefs(
+  left: CaseControlSourceRef,
+  right: CaseControlSourceRef,
+) {
+  return (
+    (left.pageIndex ?? Number.MAX_SAFE_INTEGER) -
+      (right.pageIndex ?? Number.MAX_SAFE_INTEGER) ||
+    left.spanId.localeCompare(right.spanId)
   );
 }
 
@@ -197,7 +240,7 @@ export function filterCaseControlBySourceGrounding(
   control: CaseControlDto,
   grounding: CaseControlSourceGrounding,
 ): CaseControlDto {
-  const queue = control.queue.flatMap((item) => {
+  const groundedQueue = control.queue.flatMap((item, itemIndex) => {
     const sourceRefs = item.sourceRefs.filter((sourceRef) =>
       sourceRefMatchesGrounding(sourceRef, grounding),
     );
@@ -206,13 +249,26 @@ export function filterCaseControlBySourceGrounding(
       return [];
     }
 
+    const orderedSourceRefs = [...sourceRefs].sort(compareSourceRefs);
+
     return [
       {
-        ...item,
-        sourceRefs,
+        item: {
+          ...item,
+          sourceRefs: orderedSourceRefs,
+        },
+        sourceOrder:
+          orderedSourceRefs[0]?.pageIndex ??
+          Number.MAX_SAFE_INTEGER,
+        queueOrder: itemIndex,
       },
     ];
   });
+  const queue = groundedQueue.sort(
+    (left, right) =>
+      left.sourceOrder - right.sourceOrder ||
+      left.queueOrder - right.queueOrder,
+  ).map((entry) => entry.item);
 
   return {
     ...control,
@@ -264,13 +320,17 @@ export function buildCaseControlDto(workspace: CaseWorkspaceDto): CaseControlDto
   const queue = reflection.issues
     .filter((issue) => issue.status === "open")
     .sort(compareIssues)
-    .slice(0, 5)
     .map((issue) => toControlItem(issue, spans, docs));
-  const activeItem = queue[0] ?? null;
+  const reducedQueue = workspace.reviewActions
+    .filter((action) => action.status === "open")
+    .sort(compareReviewActions)
+    .map((action) => toControlItemFromReviewAction(action, spans, docs));
+  const activeQueue = workspace.reviewActions.length > 0 ? reducedQueue : queue;
+  const activeItem = activeQueue[0] ?? null;
   const copy = primaryCopy({
     activeItem,
     docs: reflection.stats.docCount,
-    openItems: reflection.stats.openIssueCount,
+    openItems: activeQueue.length,
   });
 
   return {
@@ -283,12 +343,12 @@ export function buildCaseControlDto(workspace: CaseWorkspaceDto): CaseControlDto
     footerEnabled: reflection.isLive,
     primaryDetail: copy.detail,
     primaryMessage: copy.message,
-    queue,
+    queue: activeQueue,
     readiness: copy.readiness,
     stats: {
       docs: reflection.stats.docCount,
       facts: reflection.stats.factCount,
-      openItems: reflection.stats.openIssueCount,
+      openItems: activeQueue.length,
       sources: reflection.stats.sourceSpanCount,
     },
   };

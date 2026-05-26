@@ -5,6 +5,7 @@ import {
   documentSha256Schema,
   ocrConversionStatusSchema,
 } from "@/lib/contracts/ocr-conversions";
+import { caseReviewActionDtoSchema } from "@/lib/contracts/review-reducer";
 
 export const caseWorkspaceSourceKindSchema = z.enum([
   "intake",
@@ -216,6 +217,7 @@ export const caseWorkspaceDtoSchema = z.object({
   facts: z.array(caseWorkspaceFactDtoSchema),
   chronologyEvents: z.array(caseWorkspaceChronologyEventDtoSchema),
   issues: z.array(caseWorkspaceIssueDtoSchema),
+  reviewActions: z.array(caseReviewActionDtoSchema).default([]),
   generatedAt: isoDateTimeSchema,
 });
 

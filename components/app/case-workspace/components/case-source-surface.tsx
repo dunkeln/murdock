@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { PdfViewer } from "@/components/app/pdf-viewer";
@@ -10,7 +9,6 @@ type CaseSourceSurfaceProps = {
   className?: string;
   documentName?: string;
   mode?: CaseSourceSurfaceMode;
-  onVisiblePageIndexChange?: (pageIndex: number | null) => void;
   overlay?: ReactNode;
   previewedFile?: File | null;
   sourceUrl?: string | null;
@@ -43,89 +41,11 @@ export function CaseSourceSurface({
   className,
   documentName,
   mode = "contained",
-  onVisiblePageIndexChange,
   overlay,
   previewedFile = null,
   sourceUrl = null,
 }: CaseSourceSurfaceProps) {
   const canRenderPdf = Boolean(previewedFile || sourceUrl);
-  const scrollViewportRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const viewport = scrollViewportRef.current;
-
-    if (!onVisiblePageIndexChange) {
-      return;
-    }
-
-    const reportVisiblePageIndex: (pageIndex: number | null) => void =
-      onVisiblePageIndexChange;
-
-    if (!viewport || !canRenderPdf) {
-      reportVisiblePageIndex(null);
-      return;
-    }
-
-    const visibleViewport = viewport;
-    let animationFrameId: number | null = null;
-
-    function updateVisiblePage() {
-      if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-      }
-
-      animationFrameId = requestAnimationFrame(() => {
-        const viewportRect = visibleViewport.getBoundingClientRect();
-        const pageFrames = Array.from(
-          visibleViewport.querySelectorAll<HTMLElement>("[data-pdf-page-frame]"),
-        );
-        let visiblePageIndex: number | null = null;
-        let largestVisibleHeight = 0;
-
-        for (const pageFrame of pageFrames) {
-          const pageNumber = Number(pageFrame.dataset.pdfPageFrame);
-
-          if (!Number.isFinite(pageNumber)) {
-            continue;
-          }
-
-          const pageRect = pageFrame.getBoundingClientRect();
-          const visibleHeight = Math.max(
-            0,
-            Math.min(pageRect.bottom, viewportRect.bottom) -
-              Math.max(pageRect.top, viewportRect.top),
-          );
-
-          if (visibleHeight > largestVisibleHeight) {
-            largestVisibleHeight = visibleHeight;
-            visiblePageIndex = pageNumber - 1;
-          }
-        }
-
-        reportVisiblePageIndex(visiblePageIndex);
-      });
-    }
-
-    const mutationObserver = new MutationObserver(updateVisiblePage);
-    const resizeObserver = new ResizeObserver(updateVisiblePage);
-
-    mutationObserver.observe(visibleViewport, { childList: true, subtree: true });
-    resizeObserver.observe(visibleViewport);
-    visibleViewport.addEventListener("scroll", updateVisiblePage, { passive: true });
-    window.addEventListener("resize", updateVisiblePage);
-    updateVisiblePage();
-
-    return () => {
-      if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-      }
-
-      mutationObserver.disconnect();
-      resizeObserver.disconnect();
-      visibleViewport.removeEventListener("scroll", updateVisiblePage);
-      window.removeEventListener("resize", updateVisiblePage);
-    };
-  }, [canRenderPdf, onVisiblePageIndexChange]);
 
   return (
     <section
@@ -159,7 +79,6 @@ export function CaseSourceSurface({
             <div
               className="h-full min-w-0 max-w-full overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               data-pdf-scroll-viewport
-              ref={scrollViewportRef}
             >
               <div
                 className="min-w-0 max-w-full"

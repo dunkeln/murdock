@@ -8,13 +8,16 @@ import type {
   CaseWorkspaceSourceKind,
   CaseWorkspaceSourceSpanDto,
 } from "@/lib/contracts/case-workspace";
+import type { CaseReviewActionDto } from "@/lib/contracts/review-reducer";
 import { createNeonSql } from "@/lib/server/adapters/neon";
 import {
+  type CaseReviewActionRow,
   type CaseWorkspaceChronologyEventRow,
   type CaseWorkspaceFactRow,
   type CaseWorkspaceIssueRow,
   type CaseWorkspaceSourceDocumentRow,
   type CaseWorkspaceSourceSpanRow,
+  toCaseReviewActionDto,
   toCaseWorkspaceChronologyEventDto,
   toCaseWorkspaceFactDto,
   toCaseWorkspaceIssueDto,
@@ -28,6 +31,7 @@ export type CaseWorkspaceRecords = {
   facts: CaseWorkspaceFactDto[];
   chronologyEvents: CaseWorkspaceChronologyEventDto[];
   issues: CaseWorkspaceIssueDto[];
+  reviewActions: CaseReviewActionDto[];
 };
 
 export type UpsertSourceDocumentInput = {
@@ -108,6 +112,17 @@ function isMissingCaseDocumentsTable(error: unknown) {
   );
 }
 
+function isMissingReviewActionsTable(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  return (
+    message.includes("relation") &&
+    message.includes("does not exist") &&
+    (message.includes("public.case_review_actions") ||
+      message.includes("public.case_review_reducer_runs"))
+  );
+}
+
 async function getSourceDocumentRows(
   sql: ReturnType<typeof createNeonSql>,
   caseId: string,
@@ -166,6 +181,61 @@ async function getSourceDocumentRows(
   }
 }
 
+async function getReviewActionRows(
+  sql: ReturnType<typeof createNeonSql>,
+  caseId: string,
+) {
+  try {
+    return await sql`
+      with latest_reducer_run as (
+        select id
+        from public.case_review_reducer_runs
+        where case_id = ${caseId}
+          and status in ('succeeded', 'fallback')
+        order by completed_at desc nulls last, updated_at desc, id desc
+        limit 1
+      )
+      select
+        action.id,
+        action.case_id,
+        action.reducer_run_id,
+        action.action_key,
+        action.kind,
+        action.priority,
+        action.assigned_role,
+        action.blocking,
+        action.status,
+        action.title,
+        action.summary,
+        action.action_label,
+        action.source_span_ids,
+        action.raw_refs,
+        action.resolved_at,
+        action.created_at,
+        action.updated_at
+      from public.case_review_actions action
+      join latest_reducer_run latest on latest.id = action.reducer_run_id
+      where action.case_id = ${caseId}
+      order by
+        case action.priority
+          when 'critical' then 0
+          when 'high' then 1
+          when 'medium' then 2
+          else 3
+        end,
+        action.blocking desc,
+        action.updated_at desc,
+        action.id desc
+    `;
+  } catch (error) {
+    if (!isMissingReviewActionsTable(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
 export async function getCaseWorkspaceRecordsByCaseId(input: {
   caseId: string;
 }): Promise<CaseWorkspaceRecords> {
@@ -177,6 +247,7 @@ export async function getCaseWorkspaceRecordsByCaseId(input: {
     factRows,
     chronologyEventRows,
     issueRows,
+    reviewActionRows,
   ] = await Promise.all([
     getSourceDocumentRows(sql, input.caseId),
     sql`
@@ -267,6 +338,7 @@ export async function getCaseWorkspaceRecordsByCaseId(input: {
         detected_at desc,
         id asc
     `,
+    getReviewActionRows(sql, input.caseId),
   ]);
 
   return {
@@ -282,6 +354,9 @@ export async function getCaseWorkspaceRecordsByCaseId(input: {
     ).map(toCaseWorkspaceChronologyEventDto),
     issues: (issueRows as CaseWorkspaceIssueRow[]).map(
       toCaseWorkspaceIssueDto
+    ),
+    reviewActions: (reviewActionRows as CaseReviewActionRow[]).map(
+      toCaseReviewActionDto
     ),
   };
 }

@@ -37,6 +37,7 @@ function conversion(id: string): OcrConversionDto {
     providerModel: "mistral-ocr-latest",
     status: "ready",
     markdown: `Document ${id}`,
+    documentAnnotation: null,
     pagesProcessed: 1,
     errorMessage: null,
     expiresAt: now,

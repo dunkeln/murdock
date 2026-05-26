@@ -14,7 +14,7 @@ type CaseControlPanelProps = {
   activeReviewItemId?: string | null;
   className?: string;
   control: CaseControlDto;
-  onActiveReviewItemChange?: (itemId: string) => void;
+  onActiveReviewItemChange?: (itemId: string | null) => void;
   variant?: "rail" | "overlay";
 };
 
@@ -22,6 +22,8 @@ type RuntimeControl = CaseControlDto & {
   runtimeDetail: string;
   runtimeReadiness: CaseControlReadiness;
 };
+
+const MAX_VISIBLE_FINDINGS = 5;
 
 function isReadyStatus(status: string | undefined) {
   return status === "ready" || status === "needs_review";
@@ -106,12 +108,14 @@ export function CaseControlPanel({
 }: CaseControlPanelProps) {
   const intake = useIngestedFiles();
   const liveControl = runtimeControl(control, intake);
-  const findingItems = liveControl.queue;
+  const findingItems = liveControl.queue.slice(0, MAX_VISIBLE_FINDINGS);
   const resolvedActiveReviewItemId = findingItems.some(
     (item) => item.id === activeReviewItemId,
   )
     ? activeReviewItemId
-    : findingItems[0]?.id ?? null;
+    : activeReviewItemId === null
+      ? null
+      : findingItems[0]?.id ?? null;
   const activeItemRef = React.useRef<HTMLElement | null>(null);
   const showRuntimeDetail =
     findingItems.length === 0 && Boolean(liveControl.runtimeDetail);
@@ -184,7 +188,9 @@ export function CaseControlPanel({
                         "flex w-full min-w-0 flex-col text-left",
                         isOverlay ? "gap-2 p-2.5" : "gap-2.5 p-3",
                       )}
-                      onClick={() => onActiveReviewItemChange?.(item.id)}
+                      onClick={() =>
+                        onActiveReviewItemChange?.(isActive ? null : item.id)
+                      }
                       type="button"
                     >
                       <span className="flex min-w-0 items-start gap-2">

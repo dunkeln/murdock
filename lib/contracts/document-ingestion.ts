@@ -38,6 +38,7 @@ export const mistralOcrResultSchema = z.object({
   model: z.string(),
   pages: z.array(mistralOcrPageSchema),
   markdown: z.string(),
+  documentAnnotation: z.unknown().nullable().default(null),
   usage: z.object({
     pagesProcessed: z.number().int().nonnegative(),
     docSizeBytes: z.number().int().nonnegative().nullable(),

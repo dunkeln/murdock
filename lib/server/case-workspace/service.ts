@@ -36,6 +36,7 @@ function emptyWorkspaceRecords(): CaseWorkspaceRecords {
     chronologyEvents: [],
     facts: [],
     issues: [],
+    reviewActions: [],
     sourceDocuments: [],
     sourceSpans: [],
   };
@@ -222,6 +223,7 @@ async function loadCaseWorkspaceForUser(input: {
       facts: records.facts,
       chronologyEvents: records.chronologyEvents,
       issues: records.issues,
+      reviewActions: records.reviewActions,
       generatedAt: new Date().toISOString(),
     }),
   };

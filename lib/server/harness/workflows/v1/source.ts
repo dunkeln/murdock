@@ -122,6 +122,7 @@ export function buildSourceMapFromConversion(input: ConversionInput) {
     fileName: input.fileName,
     ocrConversionId: input.conversion.id,
     ocrResult: {
+      documentAnnotation: null,
       markdown: input.conversion.markdown,
       model: input.conversion.providerModel,
       pages: [

@@ -7,7 +7,9 @@ import {
   type HarnessRunObserver,
   runHarnessFromConversion,
 } from "@/lib/server/harness/workflows/v1/run";
+import { runHarnessV2FromAnnotatedConversion } from "@/lib/server/harness/workflows/v2/run";
 import { fromHarnessError, safeKey, type ShapeError } from "@/lib/server/workflows/shape/schema";
+import { selectedHarnessWorkflow } from "@/lib/server/workflows/shape/version";
 
 export type SourceInput = {
   caseDocumentId?: string | null;
@@ -173,13 +175,25 @@ async function runSourceHarness(input: {
   observerForSource?: (source: SourceInput, index: number) => HarnessRunObserver;
   source: SourceInput;
 }): Promise<HarnessBundleResult | ShapeError> {
-  const result = await runHarnessFromConversion({
-    caseId: input.caseId,
-    conversion: input.source.conversion,
-    docId: input.source.sourceKey,
-    fileName: input.source.fileName,
-    observer: input.observerForSource?.(input.source, input.index),
-  });
+  const observer = input.observerForSource?.(input.source, input.index);
+  const result =
+    selectedHarnessWorkflow() === "v2" &&
+    input.source.conversion.documentAnnotation !== null
+      ? await runHarnessV2FromAnnotatedConversion({
+          annotation: input.source.conversion.documentAnnotation,
+          caseId: input.caseId,
+          conversion: input.source.conversion,
+          docId: input.source.sourceKey,
+          fileName: input.source.fileName,
+          observer,
+        })
+      : await runHarnessFromConversion({
+          caseId: input.caseId,
+          conversion: input.source.conversion,
+          docId: input.source.sourceKey,
+          fileName: input.source.fileName,
+          observer,
+        });
 
   if (!result.ok) {
     return fromHarnessError(result.error);

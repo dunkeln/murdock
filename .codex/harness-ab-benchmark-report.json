@@ -1,0 +1,428 @@
+{
+  "benchmarkedAt": "2026-05-26T01:48:34.473Z",
+  "caseId": "8dac7c08-d806-40aa-a7cf-e954f7e2af8e",
+  "fileName": "ud-100-complaint-unlawful-detainer copy.pdf",
+  "conversionId": "c437b9d4-4905-4a59-b694-33389fb14685",
+  "timingsMs": {
+    "v1ExistingOcrPlusClaudeExtract": 61940,
+    "v2MistralOcrPlusAnnotation": 1713,
+    "v2AnnotationCompile": 31,
+    "v2Total": 1744
+  },
+  "usage": {
+    "v1": {
+      "inputTokens": 13632,
+      "outputTokens": 6968
+    },
+    "v2": {
+      "pagesProcessed": 4,
+      "docSizeBytes": 636565,
+      "llmTokens": null
+    }
+  },
+  "summaries": {
+    "v1": {
+      "stats": {
+        "docCount": 1,
+        "spanCount": 83,
+        "findingCount": 48,
+        "conflictCount": 0,
+        "gateCount": 48
+      },
+      "sourcedFindingCount": 48,
+      "sourcedFindingRate": 1,
+      "issueFindingCount": 36,
+      "blockingGateCount": 2,
+      "materialityCounts": {
+        "high": 29,
+        "critical": 8,
+        "medium": 8,
+        "low": 1,
+        "informational": 2
+      },
+      "titles": [
+        "Form UD-100 – Complaint for Unlawful Detainer",
+        "Attorney / Party Without Attorney – John Doe",
+        "Attorney For (Client) – Matt Murdock",
+        "Plaintiff – Name Blank",
+        "Defendant – Name Blank",
+        "Court – Superior Court of California, County of San Mateo",
+        "Case Number – Blank",
+        "Jurisdiction – Limited Civil Case, Amount Disputed",
+        "Plaintiff Type – Conflicting Selections (Individual and Public Agency)",
+        "Premises Address – Blank",
+        "Premises Location – Both City and Unincorporated Area Checked",
+        "Premises Construction Year – Blank",
+        "Plaintiff's Interest in Premises – Blank",
+        "Tenancy Agreement Date – Blank",
+        "Defendant Named in Item 6a – Blank",
+        "Agreed Rent Amount – Blank",
+        "Tenancy Type – Month-to-Month or Other (Blank)",
+        "Agreement Type – Oral",
+        "Written Agreement (Exhibit 1) – Not Attached",
+        "Tenant Protection Act (TPA) Applicability – Neither Box Checked",
+        "Notice Served – 3-Day Notice to Pay Rent or Quit",
+        "Notice Service Date – Blank",
+        "Notice Expiration Date – Blank",
+        "Notice Copy (Exhibit 2) – Not Confirmed Attached",
+        "Pages 3–4 of UD-100 Not Present",
+        "Statutory References – Civil Code § 1940 et seq.; Code Civ. Proc. §§ 425.12, 1166",
+        "Tenant Protection Act Exemption Analysis Required",
+        "Document type: Complaint – Unlawful Detainer (UD-100)",
+        "Plaintiff name (typed/printed)",
+        "Pages 1–2 of UD-100 not present in this segment",
+        "Case caption: Plaintiff and Defendant names blank",
+        "Case number blank",
+        "Item 10: Service of notice – all service method checkboxes unchecked",
+        "Item 11: Rental assistance statements – checkbox unchecked and sub-items incomplete",
+        "Item 11: Reference to form UD-120 (Verification Regarding Rental Assistance)",
+        "Item 13: Amount of rent due at time of 3-day notice – blank",
+        "Item 14: Fair rental value per day – blank",
+        "Item 20: Plaintiff's requests – possession and costs asserted; other relief unchecked",
+        "Item 20c: Past-due rent amount – blank",
+        "Item 22: Unlawful detainer assistant disclosure – incomplete",
+        "Plaintiff/Attorney signature on complaint – blank",
+        "Complaint signature date – blank",
+        "Verification: Plaintiff signature – blank",
+        "Verification date – blank",
+        "Form revision date",
+        "Item 17: Rent/eviction control ordinance – unchecked",
+        "Item 11: Rental assistance verification requirements under California law",
+        "Multiple required fields blank – complaint may be incomplete for filing"
+      ],
+      "issueTitles": [
+        "Plaintiff – Name Blank",
+        "Defendant – Name Blank",
+        "Court – Superior Court of California, County of San Mateo",
+        "Case Number – Blank",
+        "Jurisdiction – Limited Civil Case, Amount Disputed",
+        "Plaintiff Type – Conflicting Selections (Individual and Public Agency)",
+        "Premises Address – Blank",
+        "Premises Location – Both City and Unincorporated Area Checked",
+        "Premises Construction Year – Blank",
+        "Plaintiff's Interest in Premises – Blank",
+        "Tenancy Agreement Date – Blank",
+        "Defendant Named in Item 6a – Blank",
+        "Agreed Rent Amount – Blank",
+        "Tenancy Type – Month-to-Month or Other (Blank)",
+        "Written Agreement (Exhibit 1) – Not Attached",
+        "Tenant Protection Act (TPA) Applicability – Neither Box Checked",
+        "Notice Service Date – Blank",
+        "Notice Expiration Date – Blank",
+        "Notice Copy (Exhibit 2) – Not Confirmed Attached",
+        "Pages 3–4 of UD-100 Not Present",
+        "Tenant Protection Act Exemption Analysis Required",
+        "Pages 1–2 of UD-100 not present in this segment",
+        "Case caption: Plaintiff and Defendant names blank",
+        "Case number blank",
+        "Item 10: Service of notice – all service method checkboxes unchecked",
+        "Item 11: Rental assistance statements – checkbox unchecked and sub-items incomplete",
+        "Item 13: Amount of rent due at time of 3-day notice – blank",
+        "Item 14: Fair rental value per day – blank",
+        "Item 20c: Past-due rent amount – blank",
+        "Item 22: Unlawful detainer assistant disclosure – incomplete",
+        "Plaintiff/Attorney signature on complaint – blank",
+        "Complaint signature date – blank",
+        "Verification: Plaintiff signature – blank",
+        "Verification date – blank",
+        "Item 11: Rental assistance verification requirements under California law",
+        "Multiple required fields blank – complaint may be incomplete for filing"
+      ]
+    },
+    "v2": {
+      "stats": {
+        "docCount": 1,
+        "spanCount": 83,
+        "findingCount": 49,
+        "conflictCount": 0,
+        "gateCount": 49
+      },
+      "sourcedFindingCount": 48,
+      "sourcedFindingRate": 0.98,
+      "issueFindingCount": 37,
+      "blockingGateCount": 0,
+      "materialityCounts": {
+        "high": 25,
+        "medium": 16,
+        "low": 1,
+        "critical": 7
+      },
+      "titles": [
+        "Plaintiff Information",
+        "Plaintiff Address",
+        "Plaintiff Contact",
+        "Plaintiff Representation",
+        "Court Information",
+        "Complaint Type",
+        "Plaintiff Type",
+        "Venue",
+        "Tenancy Agreement",
+        "Notice Served",
+        "Plaintiff Requests",
+        "Verification",
+        "Defendant Information",
+        "Case Number",
+        "Amount Demanded",
+        "Rent Amount",
+        "Date of Agreement",
+        "Date of Notice Expiration",
+        "Rental Assistance",
+        "Fair Rental Value",
+        "Statutory Damages",
+        "Unlawful Detainer Assistant",
+        "Complaint and amended complaint both selected",
+        "Jurisdiction amount selections conflict",
+        "Plaintiff type selections conflict",
+        "Case number not assigned",
+        "Plaintiff name missing from caption",
+        "Defendant name missing from caption",
+        "Premises address not filled in",
+        "Premises location selections conflict",
+        "Plaintiff interest in premises not selected",
+        "Tenancy commencement date missing",
+        "Agreed rent amount missing",
+        "Rent payment frequency not selected",
+        "Rental agreement counterparty not identified",
+        "Tenant Protection Act status not selected",
+        "Notice expiration date missing",
+        "Exhibit 2 notice copy not attached",
+        "Notice service method not selected",
+        "Exhibit 3 proof of service not attached",
+        "Rental assistance statements not completed",
+        "Past-due rent amount missing",
+        "Fair rental value per day missing",
+        "Rent control ordinance applicability not completed",
+        "Complaint signature date missing",
+        "Plaintiff or attorney signature missing",
+        "Verification date missing",
+        "Plaintiff verification signature missing",
+        "Unlawful detainer assistant disclosure not selected"
+      ],
+      "issueTitles": [
+        "Defendant Information",
+        "Case Number",
+        "Amount Demanded",
+        "Rent Amount",
+        "Date of Agreement",
+        "Date of Notice Expiration",
+        "Rental Assistance",
+        "Fair Rental Value",
+        "Statutory Damages",
+        "Unlawful Detainer Assistant",
+        "Complaint and amended complaint both selected",
+        "Jurisdiction amount selections conflict",
+        "Plaintiff type selections conflict",
+        "Case number not assigned",
+        "Plaintiff name missing from caption",
+        "Defendant name missing from caption",
+        "Premises address not filled in",
+        "Premises location selections conflict",
+        "Plaintiff interest in premises not selected",
+        "Tenancy commencement date missing",
+        "Agreed rent amount missing",
+        "Rent payment frequency not selected",
+        "Rental agreement counterparty not identified",
+        "Tenant Protection Act status not selected",
+        "Notice expiration date missing",
+        "Exhibit 2 notice copy not attached",
+        "Notice service method not selected",
+        "Exhibit 3 proof of service not attached",
+        "Rental assistance statements not completed",
+        "Past-due rent amount missing",
+        "Fair rental value per day missing",
+        "Rent control ordinance applicability not completed",
+        "Complaint signature date missing",
+        "Plaintiff or attorney signature missing",
+        "Verification date missing",
+        "Plaintiff verification signature missing",
+        "Unlawful detainer assistant disclosure not selected"
+      ]
+    }
+  },
+  "overlap": {
+    "allTitles": {
+      "shared": [],
+      "sharedCount": 0,
+      "jaccard": 0
+    },
+    "issueTitles": {
+      "shared": [],
+      "sharedCount": 0,
+      "jaccard": 0
+    }
+  },
+  "sampleFindings": {
+    "v1": [
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Form UD-100 – Complaint for Unlawful Detainer",
+        "sourceSpanCount": 5
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Attorney / Party Without Attorney – John Doe",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Attorney For (Client) – Matt Murdock",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "missing_info",
+        "status": "missing",
+        "materiality": "critical",
+        "title": "Plaintiff – Name Blank",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "missing_info",
+        "status": "missing",
+        "materiality": "critical",
+        "title": "Defendant – Name Blank",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "issue",
+        "status": "unclear",
+        "materiality": "medium",
+        "title": "Court – Superior Court of California, County of San Mateo",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "missing_info",
+        "status": "missing",
+        "materiality": "high",
+        "title": "Case Number – Blank",
+        "sourceSpanCount": 3
+      },
+      {
+        "kind": "issue",
+        "status": "conflicting",
+        "materiality": "high",
+        "title": "Jurisdiction – Limited Civil Case, Amount Disputed",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "issue",
+        "status": "conflicting",
+        "materiality": "high",
+        "title": "Plaintiff Type – Conflicting Selections (Individual and Public Agency)",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "missing_info",
+        "status": "missing",
+        "materiality": "critical",
+        "title": "Premises Address – Blank",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "issue",
+        "status": "conflicting",
+        "materiality": "medium",
+        "title": "Premises Location – Both City and Unincorporated Area Checked",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "missing_info",
+        "status": "missing",
+        "materiality": "low",
+        "title": "Premises Construction Year – Blank",
+        "sourceSpanCount": 1
+      }
+    ],
+    "v2": [
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Plaintiff Information",
+        "sourceSpanCount": 2
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "medium",
+        "title": "Plaintiff Address",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "medium",
+        "title": "Plaintiff Contact",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "medium",
+        "title": "Plaintiff Representation",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Court Information",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Complaint Type",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "medium",
+        "title": "Plaintiff Type",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "medium",
+        "title": "Venue",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Tenancy Agreement",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Notice Served",
+        "sourceSpanCount": 1
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Plaintiff Requests",
+        "sourceSpanCount": 5
+      },
+      {
+        "kind": "fact",
+        "status": "confirmed",
+        "materiality": "high",
+        "title": "Verification",
+        "sourceSpanCount": 3
+      }
+    ]
+  }
+}

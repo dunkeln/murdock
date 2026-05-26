@@ -15,6 +15,10 @@ import {
   ocrUploadedDocumentInputSchema,
 } from "@/lib/contracts/document-ingestion";
 import { createMistralClient } from "@/lib/server/adapters/mistral/client";
+import {
+  HARNESS_V2_DOCUMENT_ANNOTATION_PROMPT,
+  harnessV2AnnotationResponseFormat,
+} from "@/lib/server/harness/workflows/v2/annotate";
 
 export const MISTRAL_OCR_MODEL = "mistral-ocr-latest";
 
@@ -33,6 +37,9 @@ function toIngestionError(error: unknown): DocumentIngestionError {
 function toOcrResult(response: Awaited<ReturnType<ReturnType<typeof createMistralClient>["ocr"]["process"]>>): MistralOcrResult {
   return mistralOcrResultSchema.parse({
     model: response.model,
+    documentAnnotation: response.documentAnnotation
+      ? JSON.parse(response.documentAnnotation)
+      : null,
     pages: response.pages.map((page) => ({
       index: page.index,
       markdown: page.markdown,
@@ -142,6 +149,56 @@ export async function uploadAndOcrDocument(
   }
 
   return ocrDocumentUrl({
+    documentUrl: uploadResult.data.signedUrl,
+    documentName: uploadResult.data.fileName,
+    includeImageBase64: input.includeImageBase64 ?? false,
+  });
+}
+
+async function ocrDocumentUrlWithHarnessV2Annotation(
+  input: OcrDocumentUrlInput,
+): Promise<DocumentIngestionResult<MistralOcrResult>> {
+  const parsedInput = ocrDocumentUrlInputSchema.safeParse(input);
+
+  if (!parsedInput.success) {
+    return {
+      isError: true,
+      errorCategory: "validation",
+      isRetryable: false,
+      message: parsedInput.error.message,
+    };
+  }
+
+  try {
+    const client = createMistralClient();
+    const response = await client.ocr.process({
+      model: MISTRAL_OCR_MODEL,
+      document: {
+        type: "document_url",
+        documentUrl: parsedInput.data.documentUrl,
+        documentName: parsedInput.data.documentName,
+      },
+      documentAnnotationFormat: harnessV2AnnotationResponseFormat(),
+      documentAnnotationPrompt: HARNESS_V2_DOCUMENT_ANNOTATION_PROMPT,
+      includeImageBase64: parsedInput.data.includeImageBase64,
+    });
+
+    return { isError: false, data: toOcrResult(response) };
+  } catch (error) {
+    return toIngestionError(error);
+  }
+}
+
+export async function uploadAndAnnotateDocumentForHarnessV2(
+  input: OcrUploadedDocumentInput,
+): Promise<DocumentIngestionResult<MistralOcrResult>> {
+  const uploadResult = await uploadDocumentForOcr(input);
+
+  if (uploadResult.isError) {
+    return uploadResult;
+  }
+
+  return ocrDocumentUrlWithHarnessV2Annotation({
     documentUrl: uploadResult.data.signedUrl,
     documentName: uploadResult.data.fileName,
     includeImageBase64: input.includeImageBase64 ?? false,

@@ -12,6 +12,15 @@ import {
   caseWorkspaceSourceSpanDtoSchema,
 } from "@/lib/contracts/case-workspace";
 import type { OcrConversionStatus } from "@/lib/contracts/ocr-conversions";
+import {
+  type CaseReviewActionDto,
+  type ReviewActionKind,
+  type ReviewActionPriority,
+  type ReviewActionRawRef,
+  type ReviewActionRole,
+  type ReviewActionStatus,
+  caseReviewActionDtoSchema,
+} from "@/lib/contracts/review-reducer";
 
 type DateValue = Date | string | null;
 
@@ -102,6 +111,26 @@ export type CaseWorkspaceIssueRow = {
   updated_at: Date | string;
 };
 
+export type CaseReviewActionRow = {
+  action_key: string;
+  action_label: string;
+  assigned_role: Exclude<ReviewActionRole, null> | null;
+  blocking: boolean;
+  case_id: string;
+  created_at: Date | string;
+  id: string;
+  kind: ReviewActionKind;
+  priority: ReviewActionPriority;
+  raw_refs: ReviewActionRawRef[] | string | null;
+  reducer_run_id: string;
+  resolved_at: DateValue;
+  source_span_ids: string[] | string | null;
+  status: ReviewActionStatus;
+  summary: string;
+  title: string;
+  updated_at: Date | string;
+};
+
 function toIsoDateTime(value: Date | string): string;
 function toIsoDateTime(value: DateValue): string | null;
 function toIsoDateTime(value: DateValue): string | null {
@@ -134,6 +163,20 @@ function toUuidArray(value: string[] | string | null): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function toRawRefs(value: ReviewActionRawRef[] | string | null): ReviewActionRawRef[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (!value) {
+    return [];
+  }
+
+  const parsed = JSON.parse(value) as unknown;
+
+  return Array.isArray(parsed) ? parsed as ReviewActionRawRef[] : [];
 }
 
 export function toCaseWorkspaceSourceDocumentDto(
@@ -239,6 +282,30 @@ export function toCaseWorkspaceIssueDto(
     sourceSpanIds: toUuidArray(row.source_span_ids),
     detectedAt: toIsoDateTime(row.detected_at),
     createdAt: toIsoDateTime(row.created_at),
+    updatedAt: toIsoDateTime(row.updated_at),
+  });
+}
+
+export function toCaseReviewActionDto(
+  row: CaseReviewActionRow,
+): CaseReviewActionDto {
+  return caseReviewActionDtoSchema.parse({
+    actionKey: row.action_key,
+    actionLabel: row.action_label,
+    assignedRole: row.assigned_role,
+    blocking: row.blocking,
+    caseId: row.case_id,
+    createdAt: toIsoDateTime(row.created_at),
+    id: row.id,
+    kind: row.kind,
+    priority: row.priority,
+    rawRefs: toRawRefs(row.raw_refs),
+    reducerRunId: row.reducer_run_id,
+    resolvedAt: toIsoDateTime(row.resolved_at),
+    sourceSpanIds: toUuidArray(row.source_span_ids),
+    status: row.status,
+    summary: row.summary,
+    title: row.title,
     updatedAt: toIsoDateTime(row.updated_at),
   });
 }

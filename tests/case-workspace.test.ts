@@ -172,7 +172,157 @@ describe("case workspace contracts", () => {
 });
 
 describe("case control grounding", () => {
-  it("filters report cards to the current document, page, and source span", () => {
+  it("uses reduced review actions before falling back to raw issues", () => {
+    const reviewActionId = "77777777-7777-4777-8777-777777777777";
+    const reducerRunId = "88888888-8888-4888-8888-888888888888";
+    const baseWorkspace = makeWorkspace();
+    const workspace = makeWorkspace({
+      sourceDocuments: baseWorkspace.sourceDocuments.map((document) => ({
+        ...document,
+        ocrConversionId: "99999999-9999-4999-8999-999999999999",
+      })),
+      reviewActions: [
+        {
+          actionKey: "review-action-party-conflict",
+          actionLabel: "Resolve conflict",
+          assignedRole: "lawyer",
+          blocking: true,
+          caseId,
+          createdAt: now,
+          id: reviewActionId,
+          kind: "conflict",
+          priority: "critical",
+          rawRefs: [
+            {
+              id: issueId,
+              key: "deadline-conflict",
+              kind: "workspace_issue",
+              label: "Response deadline conflicts across sources",
+              runId: "99999999-9999-4999-8999-999999999999",
+              sourceKey: null,
+            },
+          ],
+          reducerRunId,
+          resolvedAt: null,
+          sourceSpanIds: [sourceSpanId],
+          status: "open",
+          summary: "Reduced action keeps the same source support.",
+          title: "Review controlling deadline",
+          updatedAt: now,
+        },
+      ],
+    });
+
+    const control = buildCaseControlDto(workspace);
+
+    expect(control.queue).toHaveLength(1);
+    expect(control.activeItem).toMatchObject({
+      id: reviewActionId,
+      actionLabel: "Resolve conflict",
+      priority: "critical",
+      title: "Review controlling deadline",
+    });
+    expect(control.activeItem?.sourceRefs[0]?.spanId).toBe(sourceSpanId);
+  });
+
+  it("does not resurrect raw issues when all reduced actions are resolved", () => {
+    const baseWorkspace = makeWorkspace();
+    const workspace = makeWorkspace({
+      sourceDocuments: baseWorkspace.sourceDocuments.map((document) => ({
+        ...document,
+        ocrConversionId: "99999999-9999-4999-8999-999999999999",
+      })),
+      reviewActions: [
+        {
+          actionKey: "review-action-party-conflict",
+          actionLabel: "Resolve conflict",
+          assignedRole: "lawyer",
+          blocking: true,
+          caseId,
+          createdAt: now,
+          id: "77777777-7777-4777-8777-777777777777",
+          kind: "conflict",
+          priority: "critical",
+          rawRefs: [
+            {
+              id: issueId,
+              key: "deadline-conflict",
+              kind: "workspace_issue",
+              label: "Response deadline conflicts across sources",
+              runId: "99999999-9999-4999-8999-999999999999",
+              sourceKey: null,
+            },
+          ],
+          reducerRunId: "88888888-8888-4888-8888-888888888888",
+          resolvedAt: now,
+          sourceSpanIds: [sourceSpanId],
+          status: "resolved",
+          summary: "Reduced action keeps the same source support.",
+          title: "Review controlling deadline",
+          updatedAt: now,
+        },
+      ],
+    });
+
+    const control = buildCaseControlDto(workspace);
+
+    expect(control.queue).toEqual([]);
+    expect(control.activeItem).toBeNull();
+    expect(control.stats.openItems).toBe(0);
+  });
+
+  it("filters from the full queue before applying the visible card cap", () => {
+    const copyDocumentId = "77777777-7777-4777-8777-777777777777";
+    const copySpans = Array.from({ length: 6 }, (_, index) => ({
+      ...makeWorkspace().sourceSpans[0]!,
+      id: `77777777-7777-4777-8777-${String(index).padStart(12, "0")}`,
+      sourceDocumentId: copyDocumentId,
+      spanKey: `copy-span-${index}`,
+      verbatimExcerpt: `Copy issue ${index}`,
+    }));
+    const workspace = makeWorkspace({
+      sourceDocuments: [
+        ...makeWorkspace().sourceDocuments.map((document) => ({
+          ...document,
+          ocrConversionId: "99999999-9999-4999-8999-999999999999",
+        })),
+        {
+          ...makeWorkspace().sourceDocuments[0]!,
+          id: copyDocumentId,
+          fileName: "notice copy.pdf",
+          ocrConversionId: "99999999-9999-4999-8999-999999999998",
+          sourceKey: "notice-copy",
+        },
+      ],
+      sourceSpans: [
+        ...copySpans,
+        ...makeWorkspace().sourceSpans,
+      ],
+      issues: [
+        ...copySpans.map((span, index) => ({
+          ...makeWorkspace().issues[0]!,
+          id: `88888888-8888-4888-8888-${String(index).padStart(12, "0")}`,
+          issueKey: `copy-issue-${index}`,
+          sourceSpanIds: [span.id],
+          title: `Copy issue ${index}`,
+          detectedAt: "2026-02-01T19:21:00.000Z",
+        })),
+        ...makeWorkspace().issues,
+      ],
+    });
+    const filtered = filterCaseControlBySourceGrounding(
+      buildCaseControlDto(workspace),
+      {
+        docId: sourceDocumentId,
+        fileName: "notice.pdf",
+      },
+    );
+
+    expect(filtered.queue).toHaveLength(1);
+    expect(filtered.queue[0]?.id).toBe(issueId);
+  });
+
+  it("filters report cards to the current document without hiding other pages", () => {
     const baseWorkspace = makeWorkspace();
     const otherSourceSpanId = "77777777-7777-4777-8777-777777777777";
     const otherIssueId = "88888888-8888-4888-8888-888888888888";
@@ -208,24 +358,24 @@ describe("case control grounding", () => {
     const filtered = filterCaseControlBySourceGrounding(control, {
       docId: sourceDocumentId,
       fileName: "notice.pdf",
-      pageIndex: 0,
-      spanIds: new Set([sourceSpanId]),
     });
 
-    expect(filtered.queue).toHaveLength(1);
+    expect(filtered.queue).toHaveLength(2);
     expect(filtered.queue[0]?.id).toBe(issueId);
+    expect(filtered.queue[1]?.id).toBe(otherIssueId);
     expect(filtered.queue[0]?.sourceRefs.map((source) => source.spanId)).toEqual([
       sourceSpanId,
     ]);
+    expect(filtered.queue[1]?.sourceRefs.map((source) => source.spanId)).toEqual([
+      otherSourceSpanId,
+    ]);
 
-    const pageMismatch = filterCaseControlBySourceGrounding(control, {
-      docId: sourceDocumentId,
-      fileName: "notice.pdf",
-      pageIndex: 1,
-      spanIds: new Set([sourceSpanId]),
+    const documentMismatch = filterCaseControlBySourceGrounding(control, {
+      docId: "99999999-9999-4999-8999-999999999999",
+      fileName: "other.pdf",
     });
 
-    expect(pageMismatch.queue).toEqual([]);
+    expect(documentMismatch.queue).toEqual([]);
   });
 });
 

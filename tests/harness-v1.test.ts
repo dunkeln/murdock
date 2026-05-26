@@ -21,6 +21,7 @@ function source() {
     ocrConversionId: "22222222-2222-4222-8222-222222222222",
     providerModel: "mistral-ocr-latest",
     ocrResult: {
+      documentAnnotation: null,
       markdown:
         "Purchase price: $250,000.\n\nClosing deadline: March 14, 2026.",
       model: "mistral-ocr-latest",
@@ -253,6 +254,7 @@ describe("harness v1", () => {
         fileName: "asset-schedule.pdf",
         ocrConversionId: "22222222-2222-4222-8222-222222222222",
         ocrResult: {
+          documentAnnotation: null,
           markdown: "Purchase price: $250,000.",
           model: "mistral-ocr-latest",
           pages: [
