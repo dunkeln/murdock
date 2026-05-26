@@ -98,6 +98,36 @@ Useful future tool boundaries include `getReadiness`, `searchFindings`, `getFind
 
 This supports the funnel strategy: wide OCR/source data stays in durable harness state, while the LLM pulls only the relevant slices needed for the current question. It also keeps token budget lower and prevents the footer runtime from becoming the workflow control plane.
 
+## Operational Signal Ledger Direction
+
+The next primitive should be an operational signal ledger, not a canonical matter status machine.
+
+Do not introduce universal legal workflow states such as `intake`, `pending_signature`, `ready_to_file`, `filed`, `awaiting_response`, or `pending_hearing` as durable case status. Those labels encode assumptions about legal operator workflow and will not generalize cleanly across immigration, bankruptcy, criminal, family, corporate, litigation, and other practice areas.
+
+Instead, store structured temporal observations that describe what changed, what remains active, what was superseded, and what evidence supports each observation. Runtime agents may synthesize a freeform matter posture from those signals in a response, but v1 should not persist that synthesized posture as source-of-truth state.
+
+The preferred primitive is a case-scoped signal record with:
+
+- `signalType`: document added, document changed, review action opened/resolved/dismissed, deadline/date detected, party/value changed, conflict detected, user note, external event, or similar observation-level categories.
+- `title` and `summary`: compact human-readable operational wording.
+- `observedAt` and optional `occurredAt`: separate system observation time from real-world event time.
+- `sourceRefs` / `rawRefs`: source spans, documents, revision claims, review actions, and user events that support the signal.
+- `importance`: low, medium, high, or blocking.
+- `state`: active, superseded, resolved, or informational.
+- `generatedBy`: deterministic rule, harness/reducer, human, or external connector.
+
+Azimuth decision on May 25, 2026: **PILOT FIRST**. Implement a narrow v1 ledger and MCP read surface only. Derive signals from existing `case_source_documents`, `document_revision_claims`, `case_review_actions`, and `case_review_action_events`. Do not add court calendars, external connectors, filing receipts, practice-area profiles, or persisted runtime posture in v1.
+
+The pilot must answer these questions without raw table access:
+
+- What changed in this matter?
+- What is still active?
+- What was superseded?
+- What source supports this signal?
+- What human action changed the operational picture?
+
+If the signal ledger cannot answer those cleanly, runtime synthesis will compound ambiguity. Keep the durable layer structured and evidence-backed; keep posture synthesis freeform and runtime-scoped until the signal substrate proves useful.
+
 ## Case Workspace UX Direction
 
 The case workspace should feel like an evolving legal matter, not a collection of AI tools. The lawyer or legal operator should see source material, quiet attention cues, and a ready/not-ready footer affordance, not harness telemetry, AG-UI event language, orchestration labels, or dashboard KPI behavior.

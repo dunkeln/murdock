@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "test": "vitest run",
+    "mcp:stdio": "node scripts/murdock-mcp-stdio.mjs",
     "audit:lean": "knip --no-gitignore --include files,dependencies,unlisted,unresolved,binaries",
     "build": "next build",
     "start": "next start",

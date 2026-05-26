@@ -61,6 +61,7 @@ Do not print secrets in logs or client components.
 - `lib/server/case-workspace/` contains deterministic, provenance-first case workspace loading for chronology, facts, source spans, and surfaced operational issues.
 - `lib/server/telemetry/` contains Langfuse/OpenTelemetry setup and small tracing helpers. Telemetry payloads should use IDs, counts, statuses, and structured error categories instead of raw legal text, OCR markdown, or provider secrets.
 - `lib/server/workflows/` contains provider-independent legal workflow orchestration and validation.
+- `lib/server/mcp/` contains the contained MCP tool service. It exposes bounded, schema-validated case tools only; it must not expose raw SQL, broad database dumps, raw OCR payloads, or prompt resources.
 - `db/migrations/` contains incremental Postgres migrations for Neon.
 
 ## Cognitive Load Controls
@@ -87,6 +88,69 @@ Default feature rule:
 4. Put use-case flow in a service.
 5. Let server actions bridge UI events to services.
 6. Let components project typed state only.
+
+## MCP Connector
+
+The MCP surface is a connector into Murdock's existing workspace read model, not
+a second agent runtime. The service boundary is:
+
+```text
+Claude Desktop
+-> scripts/murdock-mcp-stdio.mjs
+-> /api/mcp/v1
+-> lib/server/mcp/v1
+-> case workspace services and repositories
+```
+
+Run the app before connecting Claude:
+
+```bash
+npm run dev
+```
+
+Claude Desktop should launch the bridge directly so stdout remains pure
+JSON-RPC:
+
+```json
+{
+  "mcpServers": {
+    "murdock": {
+      "command": "node",
+      "args": ["/Users/prateek/code/murdock/scripts/murdock-mcp-stdio.mjs"],
+      "env": {
+        "MURDOCK_MCP_HTTP_URL": "http://localhost:3000/api/mcp/v1"
+      }
+    }
+  }
+}
+```
+
+Optional hardening:
+
+```bash
+MURDOCK_MCP_API_TOKEN=
+MURDOCK_MCP_TIMEOUT_MS=30000
+```
+
+If `MURDOCK_MCP_API_TOKEN` is present in the Next.js server environment, the
+same token must be present in the Claude connector environment. The route is a
+public HTTP endpoint; keep auth checks in the route and permission checks in
+the service. Do not add MCP tools that bypass the typed workspace DTOs.
+
+MCP outputs must not expose app-specific metadata or database identifiers. Use
+MCP-scoped opaque refs (`action_...`, `doc_...`, `span_...`, `claim_...`) for
+follow-up calls, and resolve those refs back to internal UUIDs only inside
+`lib/server/mcp/v1/service.ts`. Do not return raw UUIDs, reducer run IDs, raw
+refs, OCR conversion IDs, document hashes, case document IDs, or source span ID
+arrays to MCP clients.
+
+For broad questions such as "what needs attention in this case?", clients
+should call `get_case_review_digest` before flat tools. The digest is the
+summary collation layer: it returns group counts, omitted counts, priorities,
+and sample titles while hiding raw refs and source span IDs. Clients should
+then call `get_case_review_group` for one selected group. Use narrower
+provenance tools like `get_open_review_actions`, `get_source_span`, and
+`search_case_evidence` only after the user asks for evidence or detail.
 
 Avoid these cognitive-load traps:
 

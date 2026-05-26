@@ -26,6 +26,42 @@ ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=
 ```
 
+## Claude MCP Connector
+
+Murdock exposes a contained MCP v1 tool surface at `/api/mcp/v1`. Run the app
+first, then point Claude Desktop at the stdio bridge:
+
+```bash
+npm run dev
+```
+
+```json
+{
+  "mcpServers": {
+    "murdock": {
+      "command": "node",
+      "args": ["/Users/prateek/code/murdock/scripts/murdock-mcp-stdio.mjs"],
+      "env": {
+        "MURDOCK_MCP_HTTP_URL": "http://localhost:3000/api/mcp/v1"
+      }
+    }
+  }
+}
+```
+
+If `MURDOCK_MCP_API_TOKEN` is set on the Next.js server, set the same value in
+the Claude connector `env`. The bridge writes only MCP JSON-RPC messages to
+stdout and structured process logs to stderr.
+
+For broad case-review questions, the MCP exposes `get_case_review_digest` as the
+first-call tool. It returns group counts, omitted counts, priorities, and sample
+titles only. Use `get_case_review_group` to drill into one group, and use
+narrower provenance tools only after that.
+
+MCP outputs use MCP-scoped opaque refs such as `action_...`, `doc_...`, and
+`span_...`. Internal database UUIDs, reducer refs, raw refs, OCR conversion IDs,
+document hashes, and source span IDs should not leave the server boundary.
+
 ## Harness V1
 
 The v1 harness starts after OCR:
