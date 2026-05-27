@@ -8,16 +8,17 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const caseReviewActions = pgTable("case_review_actions", {
-  actionKey: text("action_key").notNull(),
-  actionLabel: text("action_label").notNull(),
+export const caseReviewWorkItems = pgTable("case_review_work_items", {
   blocking: boolean("blocking").notNull(),
   caseId: uuid("case_id").notNull(),
   id: uuid("id").defaultRandom().primaryKey(),
+  kind: text("kind").notNull(),
+  key: text("work_item_key").notNull(),
   priority: text("priority").notNull(),
-  rawRefs: jsonb("raw_refs").$type<unknown>().notNull(),
-  reducerRunId: uuid("reducer_run_id").notNull(),
-  requiredCapability: text("required_capability").notNull(),
+  provenanceRefs: jsonb("provenance_refs").$type<unknown>().notNull(),
+  sourceRunId: uuid("source_run_id"),
+  sourceType: text("source_type").notNull(),
+  reviewPrompt: text("review_prompt").notNull(),
   sourceSpanIds: uuid("source_span_ids").array().notNull(),
   status: text("status").notNull(),
   summary: text("summary").notNull(),

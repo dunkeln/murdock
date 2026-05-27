@@ -6,7 +6,14 @@ import {
   type MatterOperationState,
 } from "@/lib/contracts/matter-operations";
 import {
-  caseReviewActions,
+  reviewWorkItemProvenanceRefSchema,
+  reviewWorkItemSchema,
+  type ReviewWorkItem,
+  type ReviewWorkItemProvenanceRef,
+} from "@/lib/contracts/review-work-item";
+import { sourceSpanProvenanceRefs } from "@/lib/review-work-items";
+import {
+  caseReviewWorkItems,
   documentRevisionClaims,
   matterOperationEvents,
   matterOperations,
@@ -15,7 +22,7 @@ import {
 type DateValue = Date | string | null;
 type MatterOperationRow = typeof matterOperations.$inferSelect;
 type MatterOperationEventRow = typeof matterOperationEvents.$inferSelect;
-type SourceReviewActionRow = typeof caseReviewActions.$inferSelect;
+type SourceReviewActionRow = typeof caseReviewWorkItems.$inferSelect;
 
 export type SourceRevisionClaimWithVersions =
   typeof documentRevisionClaims.$inferSelect & {
@@ -49,6 +56,35 @@ function toUuidArray(value: string[] | string | null): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function toProvenanceRefs(value: unknown): ReviewWorkItemProvenanceRef[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    const parsed = reviewWorkItemProvenanceRefSchema.safeParse(item);
+
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function uniqueProvenanceRefs(
+  refs: ReviewWorkItemProvenanceRef[],
+): ReviewWorkItemProvenanceRef[] {
+  const seen = new Set<string>();
+
+  return refs.filter((ref) => {
+    const key = `${ref.kind}:${ref.ref}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 export function toMatterOperationDto(row: MatterOperationRow): MatterOperationDto {
@@ -91,45 +127,43 @@ export function toMatterOperationEventDto(
   });
 }
 
-export function reviewActionState(status: string): MatterOperationState {
-  if (status === "resolved" || status === "dismissed") {
-    return status;
-  }
-
-  return "open";
-}
-
 export function revisionClaimState(status: string): MatterOperationState {
   return status === "dismissed" ? "dismissed" : "open";
 }
 
-export function reviewActionProvenance(action: SourceReviewActionRow) {
-  return [
-    ...toUuidArray(action.sourceSpanIds).map((sourceSpanId) => ({
-      kind: "source_span",
-      label: null,
-      ref: sourceSpanId,
-    })),
-    ...(Array.isArray(action.rawRefs) ? action.rawRefs : []).flatMap((ref) => {
-      if (
-        typeof ref !== "object" ||
-        ref === null ||
-        !("kind" in ref) ||
-        !("id" in ref)
-      ) {
-        return [];
-      }
+export function reviewWorkItemFromActionRow(
+  action: SourceReviewActionRow,
+): ReviewWorkItem {
+  const sourceSpanIds = toUuidArray(action.sourceSpanIds);
+  const provenanceRefs = uniqueProvenanceRefs([
+    ...toProvenanceRefs(action.provenanceRefs),
+    ...sourceSpanProvenanceRefs(sourceSpanIds),
+  ]);
 
-      return [
-        {
-          kind: String(ref.kind),
-          label:
-            "label" in ref && typeof ref.label === "string" ? ref.label : null,
-          ref: String(ref.id),
-        },
-      ];
-    }),
-  ];
+  return reviewWorkItemSchema.parse({
+    blocking: action.blocking,
+    caseId: action.caseId,
+    createdAt: toIsoDateTime(action.updatedAt),
+    id: action.id,
+    key: action.key,
+    kind: {
+      code: action.kind,
+      family: action.kind,
+    },
+    origin: {
+      sourceRunId: action.sourceRunId,
+      sourceType: action.sourceType,
+    },
+    priority: action.priority,
+    provenanceRefs,
+    resolvedAt: null,
+    reviewPrompt: action.reviewPrompt,
+    sourceSpanIds,
+    status: action.status,
+    summary: action.summary,
+    title: action.title,
+    updatedAt: toIsoDateTime(action.updatedAt),
+  });
 }
 
 export function revisionClaimProvenance(claim: SourceRevisionClaimWithVersions) {

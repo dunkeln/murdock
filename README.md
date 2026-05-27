@@ -56,11 +56,22 @@ stdout and structured process logs to stderr.
 For broad case-review questions, the MCP exposes `get_case_review_digest` as the
 first-call tool. It returns group counts, omitted counts, priorities, and sample
 titles only. Use `get_case_review_group` to drill into one group, and use
-narrower provenance tools only after that.
+narrower provenance tools only after that. For next-step planning, use
+`get_roi_review_plan` to propose bounded review choices and
+`preview_review_transition_plan` to inspect status changes without writing them.
 
-MCP outputs use MCP-scoped opaque refs such as `action_...`, `doc_...`, and
-`span_...`. Internal database UUIDs, reducer refs, raw refs, OCR conversion IDs,
-document hashes, and source span IDs should not leave the server boundary.
+MCP outputs use MCP-scoped opaque refs such as `action_...`, `issue_...`,
+`doc_...`, and `span_...`. Internal database UUIDs, reducer refs, raw refs, OCR
+conversion IDs, document hashes, and source span IDs should not leave the server
+boundary.
+
+## Review Work Items
+
+Human review work flows through one internal spine: `ReviewWorkItem`.
+Reducer rows, workspace issue fallbacks, matter operations, MCP review actions,
+ROI plans, operational signals, and UI control cards should project from
+that shape instead of redefining action fields. MCP remains a boundary
+projection with opaque refs; it is not a second review-action domain model.
 
 ## Harness V1
 

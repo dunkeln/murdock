@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import { isoDateTimeSchema } from "@/lib/contracts/cases";
 import { operationalCapabilitySchema } from "@/lib/contracts/operational-capability";
-import { reviewActionPrioritySchema } from "@/lib/contracts/review-reducer";
+import {
+  reviewWorkItemPrioritySchema,
+  reviewWorkItemProvenanceRefSchema,
+} from "@/lib/contracts/review-work-item";
 
 export const matterOperationSourceTypeSchema = z.enum([
   "review_action",
@@ -44,11 +47,12 @@ export type MatterOperationEventType = z.infer<
   typeof matterOperationEventTypeSchema
 >;
 
-export const matterOperationProvenanceRefSchema = z.object({
-  kind: z.string().min(1),
-  ref: z.string().min(1),
-  label: z.string().min(1).nullable().default(null),
-});
+export const matterOperationProvenanceRefSchema =
+  reviewWorkItemProvenanceRefSchema.pick({
+    kind: true,
+    label: true,
+    ref: true,
+  });
 
 export type MatterOperationProvenanceRef = z.infer<
   typeof matterOperationProvenanceRefSchema
@@ -64,7 +68,7 @@ export const matterOperationDtoSchema = z.object({
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   previousSourceHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   requiredCapability: operationalCapabilitySchema,
-  priority: reviewActionPrioritySchema,
+  priority: reviewWorkItemPrioritySchema,
   blocking: z.boolean(),
   state: matterOperationStateSchema,
   current: z.boolean(),

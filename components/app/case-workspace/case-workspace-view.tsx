@@ -27,6 +27,7 @@ import {
   CaseFileReviewSurface,
   type CaseFileReviewSurfaceMode,
 } from "./components/case-file-review-surface";
+import { ReviewActionPipeline } from "./components/review-action-pipeline";
 import { WorkspaceInputFooter } from "./components/workspace-input-footer";
 import { sharedWorkspaceSurfaceWidthClass } from "./components/workspace-surface";
 
@@ -79,6 +80,9 @@ const documentSwitcherWidthClass =
 
 const workspaceHeaderClass =
   "flex shrink-0 items-start justify-between gap-6";
+
+const planningLayoutClass =
+  "grid min-h-0 grid-cols-1 items-stretch gap-5 xl:flex-1 xl:grid-cols-[minmax(28rem,0.75fr)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden";
 
 function activeReviewItemIdFor(
   control: CaseControlDto,
@@ -266,6 +270,7 @@ export function CaseWorkspaceView({
     [documentRevisions, previewedDocument],
   );
   const showWorkspaceSurface = showStandaloneControlPanel || showFilePreviewSurface;
+  const showActionPipeline = control.queue.length > 0;
   const effectiveActiveReviewItemId = activeReviewItemIdFor(
     control,
     activeReviewItemId,
@@ -380,6 +385,19 @@ export function CaseWorkspaceView({
                   />
                 </div>
               ) : null}
+            </div>
+          ) : showActionPipeline ? (
+            <div className={planningLayoutClass} data-case-planning-layout>
+              <ReviewActionPipeline
+                activeReviewItemId={effectiveActiveReviewItemId}
+                className="min-h-[24rem] xl:h-full xl:min-h-0"
+                control={control}
+                onActiveReviewItemChange={setActiveReviewItemId}
+              />
+              <CaseChatSurface
+                chat={chat}
+                className="min-h-[28rem] xl:h-full xl:min-h-0 xl:flex-1"
+              />
             </div>
           ) : (
             <CaseChatSurface

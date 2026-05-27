@@ -13,14 +13,18 @@ import {
 } from "@/lib/contracts/case-workspace";
 import type { OcrConversionStatus } from "@/lib/contracts/ocr-conversions";
 import {
-  type CaseReviewActionDto,
   type ReviewActionKind,
   type ReviewActionPriority,
-  type ReviewActionRawRef,
-  type ReviewActionRequiredCapability,
-  type ReviewActionStatus,
-  caseReviewActionDtoSchema,
 } from "@/lib/contracts/review-reducer";
+import {
+  reviewWorkItemProvenanceRefSchema,
+  reviewWorkItemSchema,
+  type ReviewWorkItem,
+  type ReviewWorkItemOrigin,
+  type ReviewWorkItemProvenanceRef,
+  type ReviewWorkItemStatus,
+} from "@/lib/contracts/review-work-item";
+import { sourceSpanProvenanceRefs } from "@/lib/review-work-items";
 
 type DateValue = Date | string | null;
 
@@ -112,20 +116,20 @@ export type CaseWorkspaceIssueRow = {
 };
 
 export type CaseReviewActionRow = {
-  action_key: string;
-  action_label: string;
+  work_item_key: string;
+  review_prompt: string;
   blocking: boolean;
   case_id: string;
   created_at: Date | string;
   id: string;
   kind: ReviewActionKind;
   priority: ReviewActionPriority;
-  required_capability: ReviewActionRequiredCapability | null;
-  raw_refs: ReviewActionRawRef[] | string | null;
-  reducer_run_id: string;
+  provenance_refs: ReviewWorkItemProvenanceRef[] | string | null;
+  source_run_id: string | null;
+  source_type: ReviewWorkItemOrigin["sourceType"];
   resolved_at: DateValue;
   source_span_ids: string[] | string | null;
-  status: ReviewActionStatus;
+  status: ReviewWorkItemStatus;
   summary: string;
   title: string;
   updated_at: Date | string;
@@ -165,18 +169,37 @@ function toUuidArray(value: string[] | string | null): string[] {
     .filter(Boolean);
 }
 
-function toRawRefs(value: ReviewActionRawRef[] | string | null): ReviewActionRawRef[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
+function toProvenanceRefs(
+  value: ReviewWorkItemProvenanceRef[] | string | null,
+): ReviewWorkItemProvenanceRef[] {
+  const rawValue = typeof value === "string" ? JSON.parse(value) as unknown : value;
 
-  if (!value) {
+  if (!Array.isArray(rawValue)) {
     return [];
   }
 
-  const parsed = JSON.parse(value) as unknown;
+  return rawValue.flatMap((item) => {
+    const parsed = reviewWorkItemProvenanceRefSchema.safeParse(item);
 
-  return Array.isArray(parsed) ? parsed as ReviewActionRawRef[] : [];
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function uniqueProvenanceRefs(
+  refs: ReviewWorkItemProvenanceRef[],
+): ReviewWorkItemProvenanceRef[] {
+  const seen = new Set<string>();
+
+  return refs.filter((ref) => {
+    const key = `${ref.kind}:${ref.ref}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 export function toCaseWorkspaceSourceDocumentDto(
@@ -286,23 +309,34 @@ export function toCaseWorkspaceIssueDto(
   });
 }
 
-export function toCaseReviewActionDto(
+export function toReviewWorkItem(
   row: CaseReviewActionRow,
-): CaseReviewActionDto {
-  return caseReviewActionDtoSchema.parse({
-    actionKey: row.action_key,
-    actionLabel: row.action_label,
+): ReviewWorkItem {
+  const sourceSpanIds = toUuidArray(row.source_span_ids);
+  const provenanceRefs = uniqueProvenanceRefs([
+    ...toProvenanceRefs(row.provenance_refs),
+    ...sourceSpanProvenanceRefs(sourceSpanIds),
+  ]);
+
+  return reviewWorkItemSchema.parse({
     blocking: row.blocking,
     caseId: row.case_id,
     createdAt: toIsoDateTime(row.created_at),
     id: row.id,
-    kind: row.kind,
+    key: row.work_item_key,
+    kind: {
+      code: row.kind,
+      family: row.kind,
+    },
+    origin: {
+      sourceRunId: row.source_run_id,
+      sourceType: row.source_type,
+    },
     priority: row.priority,
-    rawRefs: toRawRefs(row.raw_refs),
-    reducerRunId: row.reducer_run_id,
-    requiredCapability: row.required_capability ?? "operational_followup",
+    provenanceRefs,
     resolvedAt: toIsoDateTime(row.resolved_at),
-    sourceSpanIds: toUuidArray(row.source_span_ids),
+    reviewPrompt: row.review_prompt,
+    sourceSpanIds,
     status: row.status,
     summary: row.summary,
     title: row.title,

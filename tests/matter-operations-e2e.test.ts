@@ -80,27 +80,27 @@ maybeDescribe("matter operations e2e", () => {
         )
       `;
       await sql`
-        insert into public.case_review_actions (
+        insert into public.case_review_work_items (
           case_id,
-          reducer_run_id,
-          action_key,
+          source_run_id,
+          source_type,
+          work_item_key,
           kind,
           priority,
-          required_capability,
           blocking,
           status,
           title,
           summary,
-          action_label,
-          raw_refs
+          review_prompt,
+          provenance_refs
         )
         values (
           ${caseId},
           ${reducerRunId},
+          'review_reducer',
           'e2e.missing.signature',
           'missing',
           'high',
-          'factual_completion',
           true,
           'open',
           'Signature missing',
@@ -228,10 +228,10 @@ maybeDescribe("matter operations e2e", () => {
       ).toBe(false);
 
       await sql`
-        update public.case_review_actions
+        update public.case_review_work_items
         set status = 'resolved', resolved_at = now(), updated_at = now()
         where case_id = ${caseId}
-          and action_key = 'e2e.missing.signature'
+          and work_item_key = 'e2e.missing.signature'
       `;
       const resolvedSnapshot = await getMatterOperationalSnapshot({
         caseId,

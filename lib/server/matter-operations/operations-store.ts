@@ -41,7 +41,7 @@ export async function upsertReviewActionMatterOperation(
     provenanceRefs: unknown;
     requiredCapability: string;
     sourceId: string;
-    sourceRunId: string;
+    sourceRunId: string | null;
     state: MatterOperationState;
     summary: string;
     title: string;

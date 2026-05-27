@@ -16,6 +16,7 @@ import {
   type CaseWorkspaceRecords,
   getCaseWorkspaceRecordsByCaseId,
 } from "@/lib/server/case-workspace/repository";
+import { reviewWorkItemFromIssue } from "@/lib/review-work-items";
 import {
   withLangfuseObservation,
   withLangfuseTrace,
@@ -36,7 +37,7 @@ function emptyWorkspaceRecords(): CaseWorkspaceRecords {
     chronologyEvents: [],
     facts: [],
     issues: [],
-    reviewActions: [],
+    reviewWorkItems: [],
     sourceDocuments: [],
     sourceSpans: [],
   };
@@ -100,6 +101,7 @@ export async function getCurrentUserCaseWorkspaceBySlug(
                 ? result.workspace.chronologyEvents.length
                 : 0,
               issues: result.ok ? result.workspace.issues.length : 0,
+              reviewWorkItems: result.ok ? result.workspace.reviewWorkItems.length : 0,
               errorCategory: result.ok ? null : result.error.errorCategory,
             }),
           },
@@ -197,6 +199,7 @@ async function loadCaseWorkspaceForUser(input: {
         facts: recordsResult.facts.length,
         chronologyEvents: recordsResult.chronologyEvents.length,
         issues: recordsResult.issues.length,
+        reviewWorkItems: recordsResult.reviewWorkItems.length,
       }),
     },
     async () => {
@@ -223,7 +226,10 @@ async function loadCaseWorkspaceForUser(input: {
       facts: records.facts,
       chronologyEvents: records.chronologyEvents,
       issues: records.issues,
-      reviewActions: records.reviewActions,
+      reviewWorkItems:
+        records.reviewWorkItems.length > 0
+          ? records.reviewWorkItems
+          : records.issues.map(reviewWorkItemFromIssue),
       generatedAt: new Date().toISOString(),
     }),
   };

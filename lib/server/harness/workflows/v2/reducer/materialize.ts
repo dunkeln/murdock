@@ -7,11 +7,13 @@ import {
   type ReviewActionKind,
   type ReviewActionPriority,
   type ReviewActionRawRef,
-  type ReviewActionRequiredCapability,
   type ReviewReducerCandidate,
   type ReviewReducerModelAction,
-  materializedReviewActionSchema,
 } from "@/lib/contracts/review-reducer";
+import {
+  rawRefToProvenanceRef,
+  reviewWorkItemDraft,
+} from "@/lib/review-work-items";
 
 const priorityRank = {
   critical: 0,
@@ -19,16 +21,6 @@ const priorityRank = {
   medium: 2,
   low: 3,
 } satisfies Record<ReviewActionPriority, number>;
-
-const capabilityRank = {
-  legal_judgment: 0,
-  filing_preparation: 1,
-  factual_completion: 2,
-  source_verification: 3,
-  document_version_review: 4,
-  timeline_management: 5,
-  operational_followup: 6,
-} satisfies Record<ReviewActionRequiredCapability, number>;
 
 function stableActionKey(candidateKeys: string[]) {
   const hash = createHash("sha256")
@@ -73,16 +65,6 @@ function strongestPriority(
     .sort((left, right) => priorityRank[left] - priorityRank[right])[0]!;
 }
 
-function strongestCapability(
-  modelCapability: ReviewActionRequiredCapability,
-  candidates: ReviewReducerCandidate[],
-) {
-  return [
-    modelCapability,
-    ...candidates.map((candidate) => candidate.requiredCapability),
-  ].sort((left, right) => capabilityRank[left] - capabilityRank[right])[0]!;
-}
-
 function strongestKind(
   modelKind: ReviewActionKind,
   candidates: ReviewReducerCandidate[],
@@ -104,23 +86,21 @@ function strongestKind(
 }
 
 function materializeAction(input: {
+  sourceRunId: string | null;
   candidateKeys: string[];
   candidates: ReviewReducerCandidate[];
   modelAction: Omit<ReviewReducerModelAction, "candidateKeys">;
 }): MaterializedReviewAction {
-  return materializedReviewActionSchema.parse({
-    actionKey: stableActionKey(input.candidateKeys),
-    actionLabel: input.modelAction.actionLabel,
+  return reviewWorkItemDraft({
     blocking:
       input.modelAction.blocking ||
       input.candidates.some((candidate) => candidate.blocking),
+    key: stableActionKey(input.candidateKeys),
     kind: strongestKind(input.modelAction.kind, input.candidates),
     priority: strongestPriority(input.modelAction.priority, input.candidates),
-    rawRefs: uniqueRawRefs(input.candidates),
-    requiredCapability: strongestCapability(
-      input.modelAction.requiredCapability,
-      input.candidates,
-    ),
+    provenanceRefs: uniqueRawRefs(input.candidates).map(rawRefToProvenanceRef),
+    reviewPrompt: input.modelAction.actionLabel,
+    sourceRunId: input.sourceRunId,
     sourceSpanIds: uniqueSorted(
       input.candidates.flatMap((candidate) => candidate.sourceSpanIds),
     ),
@@ -133,14 +113,14 @@ export function fallbackReviewActions(
   candidates: ReviewReducerCandidate[],
 ): MaterializedReviewAction[] {
   return candidates.map((candidate) =>
-    materializedReviewActionSchema.parse({
-      actionKey: stableActionKey([candidate.candidateKey]),
-      actionLabel: candidate.actionLabel,
+    reviewWorkItemDraft({
       blocking: candidate.blocking,
+      key: stableActionKey([candidate.candidateKey]),
       kind: candidate.kind,
       priority: candidate.priority,
-      rawRefs: candidate.rawRefs,
-      requiredCapability: candidate.requiredCapability,
+      provenanceRefs: candidate.rawRefs.map(rawRefToProvenanceRef),
+      reviewPrompt: candidate.actionLabel,
+      sourceRunId: candidate.rawRefs[0]?.runId ?? null,
       sourceSpanIds: uniqueSorted(candidate.sourceSpanIds),
       summary: candidate.summary,
       title: candidate.title,
@@ -192,6 +172,9 @@ export function materializeModelReviewActions(input: {
         candidateKeys,
         candidates,
         modelAction,
+        sourceRunId:
+          candidates.find((candidate) => candidate.rawRefs[0]?.runId)?.rawRefs[0]
+            ?.runId ?? null,
       }),
     );
   }

@@ -94,48 +94,48 @@ export async function upsertReviewActions(input: {
   await Promise.all(
     input.actions.map((action) =>
       sql`
-        insert into public.case_review_actions (
+        insert into public.case_review_work_items (
           case_id,
-          reducer_run_id,
-          action_key,
+          source_run_id,
+          source_type,
+          work_item_key,
           kind,
           priority,
-          required_capability,
           blocking,
           status,
           title,
           summary,
-          action_label,
+          review_prompt,
           source_span_ids,
-          raw_refs
+          provenance_refs
         )
         values (
           ${input.caseId},
           ${input.reducerRunId},
-          ${action.actionKey},
-          ${action.kind},
+          ${action.origin.sourceType},
+          ${action.key},
+          ${action.kind.family},
           ${action.priority},
-          ${action.requiredCapability},
           ${action.blocking},
           'open',
           ${action.title},
           ${action.summary},
-          ${action.actionLabel},
+          ${action.reviewPrompt},
           ${action.sourceSpanIds},
-          ${jsonb(action.rawRefs)}::jsonb
+          ${jsonb(action.provenanceRefs)}::jsonb
         )
-        on conflict (case_id, action_key) do update
+        on conflict (case_id, work_item_key) do update
         set
-          reducer_run_id = excluded.reducer_run_id,
+          source_run_id = excluded.source_run_id,
+          source_type = excluded.source_type,
           kind = excluded.kind,
           priority = excluded.priority,
-          required_capability = excluded.required_capability,
           blocking = excluded.blocking,
           title = excluded.title,
           summary = excluded.summary,
-          action_label = excluded.action_label,
+          review_prompt = excluded.review_prompt,
           source_span_ids = excluded.source_span_ids,
-          raw_refs = excluded.raw_refs,
+          provenance_refs = excluded.provenance_refs,
           updated_at = now()
       `,
     ),
@@ -152,9 +152,9 @@ export async function recordReviewActionEvent(input: {
   const sql = createNeonSql();
 
   await sql`
-    insert into public.case_review_action_events (
+    insert into public.case_review_work_item_events (
       case_id,
-      action_id,
+      work_item_id,
       event_type,
       actor_id,
       note

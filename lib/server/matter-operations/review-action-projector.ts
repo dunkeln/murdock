@@ -3,14 +3,13 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import type { MatterOperationDto } from "@/lib/contracts/matter-operations";
+import { deriveReviewWorkItemCapability } from "@/lib/contracts/review-work-item";
+import { reviewWorkItemOperationKey } from "@/lib/review-work-items";
 import { createDrizzleDb } from "@/lib/server/adapters/neon";
-import { caseReviewActions } from "@/lib/server/db/schema/matter-operations";
+import { caseReviewWorkItems } from "@/lib/server/db/schema/matter-operations";
 
 import { insertProjectedMatterOperationEvent } from "./events-store";
-import {
-  reviewActionProvenance,
-  reviewActionState,
-} from "./mappers";
+import { reviewWorkItemFromActionRow } from "./mappers";
 import { upsertReviewActionMatterOperation } from "./operations-store";
 
 export async function projectReviewActionsToMatterOperations(input: {
@@ -19,30 +18,38 @@ export async function projectReviewActionsToMatterOperations(input: {
   const db = createDrizzleDb();
   const actions = await db
     .select()
-    .from(caseReviewActions)
-    .where(eq(caseReviewActions.caseId, input.caseId));
+    .from(caseReviewWorkItems)
+    .where(eq(caseReviewWorkItems.caseId, input.caseId));
   const operations: MatterOperationDto[] = [];
 
   for (const action of actions) {
-    const state = reviewActionState(action.status);
+    const item = reviewWorkItemFromActionRow(action);
+    const state =
+      item.status === "resolved" || item.status === "dismissed"
+        ? item.status
+        : "open";
     const operation = await upsertReviewActionMatterOperation(db, {
-      blocking: action.blocking,
-      caseId: action.caseId,
-      operationKey: `review_action:${action.actionKey}`,
-      priority: action.priority,
-      provenanceRefs: reviewActionProvenance(action),
-      requiredCapability: action.requiredCapability,
-      sourceId: action.id,
-      sourceRunId: action.reducerRunId,
+      blocking: item.blocking,
+      caseId: item.caseId,
+      operationKey: reviewWorkItemOperationKey(item),
+      priority: item.priority,
+      provenanceRefs: item.provenanceRefs.map((ref) => ({
+        kind: ref.kind,
+        label: ref.label,
+        ref: ref.ref,
+      })),
+      requiredCapability: deriveReviewWorkItemCapability(item),
+      sourceId: item.id,
+      sourceRunId: item.origin.sourceRunId ?? action.sourceRunId,
       state,
-      summary: action.summary,
-      title: action.title,
+      summary: item.summary,
+      title: item.title,
     });
     operations.push(operation);
 
     await insertProjectedMatterOperationEvent(db, {
       caseId: operation.caseId,
-      eventKey: `review_action:${action.id}:opened`,
+      eventKey: `review_action:${item.id}:opened`,
       eventType: "opened",
       operationId: operation.id,
     });
@@ -50,7 +57,7 @@ export async function projectReviewActionsToMatterOperations(input: {
     if (state === "resolved" || state === "dismissed") {
       await insertProjectedMatterOperationEvent(db, {
         caseId: operation.caseId,
-        eventKey: `review_action:${action.id}:${state}`,
+        eventKey: `review_action:${item.id}:${state}`,
         eventType: state,
         operationId: operation.id,
       });

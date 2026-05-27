@@ -223,11 +223,12 @@ export function PdfViewer({
   return (
     <section
       aria-label={label ?? file?.name ?? "Selected PDF"}
-      className="h-auto min-h-0 w-full max-w-full overflow-visible"
+      className="h-full min-h-0 w-full max-w-full overflow-hidden"
       data-pdf-viewer
     >
       <div
-        className="flex h-auto max-h-full flex-col gap-0 overflow-visible"
+        className="flex h-full min-h-0 flex-col gap-0 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        data-pdf-viewer-scroll
       >
         {isLoading ? (
           <div className="flex min-h-24 items-center gap-2 text-sm text-paper/55">

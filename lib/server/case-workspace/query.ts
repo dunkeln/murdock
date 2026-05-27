@@ -17,6 +17,7 @@ const runtimeMcpToolNameSchema = z.enum([
   "get_open_review_actions",
   "get_document_updates",
   "get_operational_signals",
+  "get_roi_review_plan",
   "get_source_span",
   "search_case_evidence",
 ]);
@@ -44,6 +45,7 @@ const runtimeMcpAliases = {
   get_open_review_actions: "Checked open actions",
   get_document_updates: "Checked document updates",
   get_operational_signals: "Checked case signals",
+  get_roi_review_plan: "Planned review options",
   get_source_span: "Checked supporting evidence",
   search_case_evidence: "Searched case evidence",
 } satisfies Record<RuntimeMcpToolName, string>;

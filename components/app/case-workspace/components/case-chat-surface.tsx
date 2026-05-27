@@ -356,7 +356,17 @@ export function CaseChatSurface({
   }, []);
 
   const scrollToLatest = React.useCallback((behavior: ScrollBehavior = "smooth") => {
-    bottomRef.current?.scrollIntoView({ block: "end", behavior });
+    const element = scrollRef.current;
+
+    if (!element) {
+      bottomRef.current?.scrollIntoView({ block: "end", behavior });
+      return;
+    }
+
+    element.scrollTo({
+      behavior,
+      top: element.scrollHeight,
+    });
     setShowJumpToLatest(false);
   }, []);
 

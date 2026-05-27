@@ -72,7 +72,6 @@ function reducerInputPayload(input: {
       candidateKey: candidate.candidateKey,
       kind: candidate.kind,
       priority: candidate.priority,
-      requiredCapability: candidate.requiredCapability,
       sourceSpanIds: candidate.sourceSpanIds,
       summary: candidate.summary,
       title: candidate.title,

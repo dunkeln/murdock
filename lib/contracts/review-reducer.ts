@@ -1,44 +1,23 @@
 import { z } from "zod";
 
-import { isoDateTimeSchema } from "@/lib/contracts/cases";
 import {
-  operationalCapabilitySchema,
-  type OperationalCapability,
-} from "@/lib/contracts/operational-capability";
+  reviewWorkItemFamilySchema,
+  reviewWorkItemPrioritySchema,
+  type ReviewWorkItemDraft,
+  type ReviewWorkItemFamily,
+  type ReviewWorkItemPriority,
+} from "@/lib/contracts/review-work-item";
 
 export const REVIEW_REDUCER_VERSION = "review-reducer.v1";
 export const REVIEW_REDUCER_SCHEMA_NAME = "murdock_review_reducer_v1";
 
-export const reviewActionKindSchema = z.enum([
-  "conflict",
-  "revision",
-  "timeline",
-  "missing",
-  "source_check",
-]);
+export const reviewActionKindSchema = reviewWorkItemFamilySchema;
 
-export type ReviewActionKind = z.infer<typeof reviewActionKindSchema>;
+export type ReviewActionKind = ReviewWorkItemFamily;
 
-export const reviewActionRequiredCapabilitySchema = operationalCapabilitySchema;
+export const reviewActionPrioritySchema = reviewWorkItemPrioritySchema;
 
-export type ReviewActionRequiredCapability = OperationalCapability;
-
-export const reviewActionPrioritySchema = z.enum([
-  "critical",
-  "high",
-  "medium",
-  "low",
-]);
-
-export type ReviewActionPriority = z.infer<typeof reviewActionPrioritySchema>;
-
-export const reviewActionStatusSchema = z.enum([
-  "open",
-  "resolved",
-  "dismissed",
-]);
-
-export type ReviewActionStatus = z.infer<typeof reviewActionStatusSchema>;
+export type ReviewActionPriority = ReviewWorkItemPriority;
 
 export const reviewActionRawRefSchema = z.object({
   kind: z.enum([
@@ -64,7 +43,6 @@ export const reviewReducerCandidateSchema = z.object({
   kind: reviewActionKindSchema,
   priority: reviewActionPrioritySchema,
   rawRefs: z.array(reviewActionRawRefSchema).min(1),
-  requiredCapability: reviewActionRequiredCapabilitySchema,
   sourceSpanIds: z.array(z.uuid()),
   summary: z.string().min(1),
   title: z.string().min(1),
@@ -80,7 +58,6 @@ export const reviewReducerModelActionSchema = z.object({
   candidateKeys: z.array(z.string().min(1)).min(1),
   kind: reviewActionKindSchema,
   priority: reviewActionPrioritySchema,
-  requiredCapability: reviewActionRequiredCapabilitySchema,
   summary: z.string().min(1),
   title: z.string().min(1),
 });
@@ -95,30 +72,6 @@ export const reviewReducerModelOutputSchema = z.object({
 
 export type ReviewReducerModelOutput = z.infer<
   typeof reviewReducerModelOutputSchema
->;
-
-export const caseReviewActionDtoSchema = z.object({
-  id: z.uuid(),
-  caseId: z.uuid(),
-  reducerRunId: z.uuid(),
-  actionKey: z.string().min(1),
-  actionLabel: z.string().min(1),
-  blocking: z.boolean(),
-  kind: reviewActionKindSchema,
-  priority: reviewActionPrioritySchema,
-  rawRefs: z.array(reviewActionRawRefSchema),
-  requiredCapability: reviewActionRequiredCapabilitySchema,
-  sourceSpanIds: z.array(z.uuid()),
-  status: reviewActionStatusSchema,
-  summary: z.string().min(1),
-  title: z.string().min(1),
-  resolvedAt: isoDateTimeSchema.nullable(),
-  createdAt: isoDateTimeSchema,
-  updatedAt: isoDateTimeSchema,
-});
-
-export type CaseReviewActionDto = z.infer<
-  typeof caseReviewActionDtoSchema
 >;
 
 export const reviewReducerRunStatusSchema = z.enum([
@@ -153,19 +106,4 @@ export type ReviewReducerRunMetadata = z.infer<
   typeof reviewReducerRunMetadataSchema
 >;
 
-export const materializedReviewActionSchema = z.object({
-  actionKey: z.string().min(1),
-  actionLabel: z.string().min(1),
-  blocking: z.boolean(),
-  kind: reviewActionKindSchema,
-  priority: reviewActionPrioritySchema,
-  rawRefs: z.array(reviewActionRawRefSchema).min(1),
-  requiredCapability: reviewActionRequiredCapabilitySchema,
-  sourceSpanIds: z.array(z.uuid()),
-  summary: z.string().min(1),
-  title: z.string().min(1),
-});
-
-export type MaterializedReviewAction = z.infer<
-  typeof materializedReviewActionSchema
->;
+export type MaterializedReviewAction = ReviewWorkItemDraft;

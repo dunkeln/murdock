@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import type { MatterOperationDto } from "@/lib/contracts/matter-operations";
-import type { ReviewActionPriority } from "@/lib/contracts/review-reducer";
+import type { ReviewWorkItemPriority } from "@/lib/contracts/review-work-item";
 import { createDrizzleDb } from "@/lib/server/adapters/neon";
 import {
   documentRevisionClaims,
@@ -54,7 +54,7 @@ export async function projectRevisionClaimsToMatterOperations(input: {
 
   for (const claim of claims) {
     const state = revisionClaimState(claim.status);
-    const priority: ReviewActionPriority =
+    const priority: ReviewWorkItemPriority =
       claim.confidence === "high" ? "high" : "medium";
     const summary = [
       `${claim.fieldLabel} was ${claim.changeType.replaceAll("_", " ")}.`,

@@ -5,9 +5,9 @@ import {
   operationalSignalDtoSchema,
 } from "@/lib/contracts/operational-signals";
 import type {
-  CaseReviewActionDto,
-  ReviewActionPriority,
-} from "@/lib/contracts/review-reducer";
+  ReviewWorkItem,
+  ReviewWorkItemPriority,
+} from "@/lib/contracts/review-work-item";
 
 type BuildOperationalSignalsInput = {
   documentRevisions: DocumentRevisionSummaryDto[];
@@ -35,30 +35,30 @@ function trimSummary(value: string) {
 }
 
 function priorityToImportance(
-  action: CaseReviewActionDto,
+  item: ReviewWorkItem,
 ): OperationalSignalDto["importance"] {
-  if (action.blocking) {
+  if (item.blocking) {
     return "blocking";
   }
 
-  const map: Record<ReviewActionPriority, OperationalSignalDto["importance"]> = {
+  const map: Record<ReviewWorkItemPriority, OperationalSignalDto["importance"]> = {
     critical: "high",
     high: "high",
     low: "low",
     medium: "medium",
   };
 
-  return map[action.priority];
+  return map[item.priority];
 }
 
 function reviewActionSignalType(
-  action: CaseReviewActionDto,
+  item: ReviewWorkItem,
 ): OperationalSignalDto["signalType"] {
-  if (action.status === "resolved") {
+  if (item.status === "resolved") {
     return "review_action_resolved";
   }
 
-  if (action.status === "dismissed") {
+  if (item.status === "dismissed") {
     return "review_action_dismissed";
   }
 
@@ -66,13 +66,13 @@ function reviewActionSignalType(
 }
 
 function reviewActionState(
-  action: CaseReviewActionDto,
+  item: ReviewWorkItem,
 ): OperationalSignalDto["state"] {
-  if (action.status === "resolved") {
+  if (item.status === "resolved") {
     return "resolved";
   }
 
-  if (action.status === "dismissed") {
+  if (item.status === "dismissed") {
     return "dismissed";
   }
 
@@ -159,38 +159,38 @@ export function buildOperationalSignals(
     ),
   );
 
-  const reviewSignals = input.workspace.reviewActions.map((action) =>
+  const reviewSignals = input.workspace.reviewWorkItems.map((item) =>
     operationalSignalDtoSchema.parse({
       actorId: null,
       actorType: "system",
-      caseId: action.caseId,
+      caseId: item.caseId,
       generatedBy: "review_reducer",
-      id: `review-action:${action.id}:${action.status}`,
-      importance: priorityToImportance(action),
-      observedAt: action.resolvedAt ?? action.updatedAt,
+      id: `review-action:${item.id}:${item.status}`,
+      importance: priorityToImportance(item),
+      observedAt: item.resolvedAt ?? item.updatedAt,
       occurredAt: null,
-      signalType: reviewActionSignalType(action),
+      signalType: reviewActionSignalType(item),
       sourceRefs: [
         {
-          id: action.id,
+          id: item.id,
           kind: "review_action",
-          label: action.title,
+          label: item.title,
         },
-        ...action.sourceSpanIds.map((sourceSpanId) => ({
-          id: sourceSpanId,
-          kind: "source_span" as const,
-          label: null,
-        })),
-        ...action.rawRefs.map((rawRef) => ({
-          id: rawRef.id,
-          kind: rawRef.kind === "revision_claim" ? "revision_claim" : "raw_ref",
-          label: rawRef.label,
+        ...item.provenanceRefs.map((ref) => ({
+          id: ref.ref,
+          kind:
+            ref.kind === "revision_claim"
+              ? "revision_claim"
+              : ref.kind === "source_span"
+                ? "source_span"
+                : "raw_ref",
+          label: ref.label,
         })),
       ],
-      sourceSpanIds: action.sourceSpanIds,
-      state: reviewActionState(action),
-      summary: trimSummary(`${action.actionLabel}: ${action.summary}`),
-      title: action.title,
+      sourceSpanIds: item.sourceSpanIds,
+      state: reviewActionState(item),
+      summary: trimSummary(`${item.reviewPrompt}: ${item.summary}`),
+      title: item.title,
     }),
   );
 

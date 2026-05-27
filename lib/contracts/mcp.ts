@@ -29,16 +29,27 @@ import {
   matterOperationStateSchema,
 } from "@/lib/contracts/matter-operations";
 import {
-  reviewActionKindSchema,
-  reviewActionPrioritySchema,
-  reviewActionRequiredCapabilitySchema,
-} from "@/lib/contracts/review-reducer";
+  reviewWorkItemFamilySchema,
+  reviewWorkItemPrioritySchema,
+  reviewWorkItemStatusSchema,
+} from "@/lib/contracts/review-work-item";
+import { operationalCapabilitySchema } from "@/lib/contracts/operational-capability";
 
 export const MURDOCK_MCP_VERSION = "murdock-mcp.v1";
 
 export const mcpOpaqueRefSchema = z
   .string()
-  .regex(/^(doc|span|fact|event|issue|action|claim|signal|operation)_[a-f0-9]{16}$/);
+  .regex(/^(doc|span|fact|event|issue|action|claim|signal|operation|plan)_[a-f0-9]{16}$/);
+
+export const mcpReviewActionRefSchema = mcpOpaqueRefSchema.refine(
+  (value) => value.startsWith("action_"),
+  { message: "Expected a review action ref." },
+);
+
+export const mcpReviewWorkItemRefSchema = mcpOpaqueRefSchema.refine(
+  (value) => value.startsWith("action_") || value.startsWith("issue_"),
+  { message: "Expected a review work item ref." },
+);
 
 export const murdockMcpToolNameSchema = z.enum([
   "list_cases",
@@ -50,7 +61,9 @@ export const murdockMcpToolNameSchema = z.enum([
   "get_document_updates",
   "get_matter_snapshot",
   "get_operational_signals",
+  "get_roi_review_plan",
   "get_source_span",
+  "preview_review_transition_plan",
   "search_case_evidence",
   "record_review_action_event",
 ]);
@@ -120,16 +133,16 @@ export const getCaseContextInputSchema = murdockMcpCaseRefSchema.extend({
 });
 
 export const mcpReviewActionSchema = z.object({
-  actionLabel: z.string().min(1),
-  actionRef: mcpOpaqueRefSchema,
+  actionRef: mcpReviewWorkItemRefSchema,
   blocking: z.boolean(),
-  kind: reviewActionKindSchema,
-  priority: reviewActionPrioritySchema,
-  requiredCapability: reviewActionRequiredCapabilitySchema,
+  kind: reviewWorkItemFamilySchema,
+  priority: reviewWorkItemPrioritySchema,
+  requiredCapability: operationalCapabilitySchema,
+  reviewPrompt: z.string().min(1),
   resolvedAt: isoDateTimeSchema.nullable(),
   sourceSpanCount: z.number().int().nonnegative(),
   sourceSpanRefs: z.array(mcpOpaqueRefSchema),
-  status: z.enum(["open", "resolved", "dismissed"]),
+  status: reviewWorkItemStatusSchema,
   summary: z.string().min(1),
   title: z.string().min(1),
 });
@@ -278,9 +291,9 @@ export const mcpReviewDigestAudienceSchema = z.enum([
 export const mcpReviewDigestItemSchema = z.object({
   actionRef: mcpOpaqueRefSchema,
   blocking: z.boolean(),
-  kind: reviewActionKindSchema,
-  priority: reviewActionPrioritySchema,
-  requiredCapability: reviewActionRequiredCapabilitySchema,
+  kind: reviewWorkItemFamilySchema,
+  priority: reviewWorkItemPrioritySchema,
+  requiredCapability: operationalCapabilitySchema,
   sourceSpanCount: z.number().int().nonnegative(),
   summary: z.string().min(1),
   title: z.string().min(1),
@@ -294,7 +307,7 @@ export const mcpReviewDigestGroupSchema = z.object({
   key: mcpReviewDigestGroupKeySchema,
   label: z.string().min(1),
   omittedCount: z.number().int().nonnegative(),
-  priority: reviewActionPrioritySchema,
+  priority: reviewWorkItemPrioritySchema,
   sampleTitles: z.array(z.string().min(1)),
 });
 
@@ -382,9 +395,9 @@ export const mcpMatterOperationSchema = z.object({
   blocking: z.boolean(),
   current: z.boolean(),
   operationRef: mcpOpaqueRefSchema,
-  priority: reviewActionPrioritySchema,
+  priority: reviewWorkItemPrioritySchema,
   provenanceRefCount: z.number().int().nonnegative(),
-  requiredCapability: reviewActionRequiredCapabilitySchema,
+  requiredCapability: operationalCapabilitySchema,
   sourceType: matterOperationSourceTypeSchema,
   state: matterOperationStateSchema,
   summary: z.string().min(1),
@@ -455,8 +468,90 @@ export const searchCaseEvidenceOutputSchema = z.object({
   query: z.string().min(1),
 });
 
+export const roiReviewPlanChoiceToneSchema = z.enum([
+  "recommended",
+  "self_start",
+  "cleanup",
+]);
+
+export const roiReviewPlanStageStateSchema = z.enum([
+  "staged",
+  "deferred",
+  "dismissed",
+]);
+
+export const roiReviewPlanRiskSchema = z.enum(["low", "medium", "high"]);
+
+export const roiReviewPlanEventTypeSchema = z.enum([
+  "comment",
+  "resolved",
+  "dismissed",
+  "reopened",
+]);
+
+export const roiReviewPlanChoiceSchema = z.object({
+  affectedReviewRefs: z.array(mcpReviewWorkItemRefSchema).min(1).max(12),
+  choiceRef: mcpOpaqueRefSchema,
+  detail: z.string().min(1).max(180),
+  eventType: roiReviewPlanEventTypeSchema,
+  id: z
+    .string()
+    .min(3)
+    .max(64)
+    .regex(/^[a-z][a-z0-9_]*$/),
+  label: z.string().min(1).max(64),
+  rationale: z.string().min(1).max(240),
+  risk: roiReviewPlanRiskSchema,
+  stageState: roiReviewPlanStageStateSchema,
+  tone: roiReviewPlanChoiceToneSchema,
+});
+
+export const roiReviewPlanTraceSchema = z.object({
+  ok: z.boolean(),
+  toolName: murdockMcpToolNameSchema,
+});
+
+export const getRoiReviewPlanInputSchema = murdockMcpCaseRefSchema.extend({
+  activeReviewRef: mcpReviewWorkItemRefSchema.optional(),
+  maxChoices: z.number().int().min(2).max(3).default(3),
+});
+
+export const getRoiReviewPlanOutputSchema = z.object({
+  case: mcpCaseSummarySchema,
+  choices: z.array(roiReviewPlanChoiceSchema).max(3),
+  generatedAt: isoDateTimeSchema,
+  mcpTrace: z.array(roiReviewPlanTraceSchema).max(12),
+  model: z.string().min(1).nullable(),
+  plannerKind: z.enum(["deterministic"]),
+  provider: z.string().min(1).nullable(),
+  warnings: z.array(z.string().min(1)),
+});
+
+export const previewReviewTransitionPlanInputSchema =
+  murdockMcpCaseRefSchema.extend({
+    actionRefs: z.array(mcpReviewWorkItemRefSchema).min(1).max(12),
+    eventType: roiReviewPlanEventTypeSchema,
+    note: z.string().trim().min(1).max(2000).nullable().default(null),
+  });
+
+export const previewReviewTransitionPlanOutputSchema = z.object({
+  case: mcpCaseSummarySchema,
+  changes: z.array(
+    z.object({
+      actionRef: mcpReviewWorkItemRefSchema,
+      blocking: z.boolean(),
+      currentStatus: reviewWorkItemStatusSchema,
+      nextStatus: reviewWorkItemStatusSchema,
+      title: z.string().min(1),
+    }),
+  ),
+  eventType: roiReviewPlanEventTypeSchema,
+  generatedAt: isoDateTimeSchema,
+  warnings: z.array(z.string().min(1)),
+});
+
 export const recordReviewActionEventInputSchema = murdockMcpCaseRefSchema.extend({
-  actionRef: mcpOpaqueRefSchema,
+  actionRef: mcpReviewActionRefSchema,
   eventType: z.enum(["comment", "resolved", "dismissed", "reopened"]),
   note: z.string().trim().min(1).max(2000).nullable().default(null),
 });
@@ -475,9 +570,11 @@ export const murdockMcpInputSchemas = {
   get_matter_snapshot: getMatterSnapshotInputSchema,
   get_open_review_actions: getOpenReviewActionsInputSchema,
   get_operational_signals: getOperationalSignalsInputSchema,
+  get_roi_review_plan: getRoiReviewPlanInputSchema,
   get_source_span: getSourceSpanInputSchema,
   list_case_documents: listCaseDocumentsInputSchema,
   list_cases: listCasesInputSchema,
+  preview_review_transition_plan: previewReviewTransitionPlanInputSchema,
   record_review_action_event: recordReviewActionEventInputSchema,
   search_case_evidence: searchCaseEvidenceInputSchema,
 } satisfies Record<MurdockMcpToolName, z.ZodType>;
@@ -490,9 +587,11 @@ export const murdockMcpOutputSchemas = {
   get_matter_snapshot: getMatterSnapshotOutputSchema,
   get_open_review_actions: getOpenReviewActionsOutputSchema,
   get_operational_signals: getOperationalSignalsOutputSchema,
+  get_roi_review_plan: getRoiReviewPlanOutputSchema,
   get_source_span: getSourceSpanOutputSchema,
   list_case_documents: listCaseDocumentsOutputSchema,
   list_cases: listCasesOutputSchema,
+  preview_review_transition_plan: previewReviewTransitionPlanOutputSchema,
   record_review_action_event: recordReviewActionEventOutputSchema,
   search_case_evidence: searchCaseEvidenceOutputSchema,
 } satisfies Record<MurdockMcpToolName, z.ZodType>;

@@ -54,7 +54,7 @@ export function CaseSourceSurface({
 
   return (
     <WorkspaceSurface
-      className={className}
+      className={cn(mode === "contained" && "h-full", className)}
       data-case-source-surface
       mode={mode}
     >
@@ -81,7 +81,10 @@ export function CaseSourceSurface({
               data-pdf-scroll-viewport
             >
               <div
-                className="min-w-0 max-w-full"
+                className={cn(
+                  "min-w-0 max-w-full",
+                  mode === "contained" && "h-full min-h-0",
+                )}
                 data-pdf-stage
                 style={pdfStageStyleByMode[mode]}
               >

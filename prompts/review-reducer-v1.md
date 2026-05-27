@@ -42,8 +42,8 @@ Prefer one clear action when several raw records share:
 - Preserve evidence IDs exactly as provided.
 - Do not invent facts, comments, resolutions, legal conclusions, or evidence records.
 - Do not hide source uncertainty, missing pages, document-quality limits, or external-law requirements.
-- Do not group items if grouping would hide a material conflict, hard gate, blocking state, or required legal-judgment task.
-- Any G3 hard gate, material conflict, or legal-judgment item must remain blocking and keep requiredCapability as "legal_judgment".
+- Do not group items if grouping would hide a material conflict, hard gate, blocking state, or legal-judgment task.
+- Any G3 hard gate, material conflict, or legal-judgment item must remain blocking.
 - Revision claims must remain tied to before/after document versions.
 - If an item cannot be safely grouped, return it as its own action.
 </rules>
@@ -73,7 +73,7 @@ One action titled "Complete rental assistance items 11a-11d" with all candidate 
 Input pattern: two party-name conflict records with competing values from different evidence records.
 
 Expected reduction:
-One blocking action titled "Choose controlling party names" with requiredCapability "legal_judgment" that preserves each conflict candidate. Do not decide which value controls.
+One blocking action titled "Choose controlling party names" that preserves each conflict candidate. Do not decide which value controls.
 </example>
 
 <example>

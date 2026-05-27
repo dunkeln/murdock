@@ -1,14 +1,10 @@
-import {
-  caseWorkspaceIssueSeverityRank,
-  caseWorkspaceIssueTypeLabels,
-} from "@/lib/case-workspace";
 import type {
   CaseWorkspaceDto,
-  CaseWorkspaceIssueDto,
   CaseWorkspaceSourceSpanDto,
 } from "@/lib/contracts/case-workspace";
-import type { CaseReviewActionDto } from "@/lib/contracts/review-reducer";
+import type { ReviewWorkItem } from "@/lib/contracts/review-work-item";
 import { buildHarnessReflection } from "@/lib/harness-reflection";
+import { compareReviewWorkItems } from "@/lib/review-work-items";
 
 export type CaseControlReadiness =
   | "empty"
@@ -29,10 +25,10 @@ export type CaseControlSourceRef = {
 
 export type CaseControlItemDto = {
   id: string;
-  actionLabel: string;
   blocking: boolean;
   kind: "conflict" | "revision" | "timeline" | "missing" | "source_check";
   priority: "critical" | "high" | "medium" | "low";
+  reviewPrompt: string;
   sourceRefs: CaseControlSourceRef[];
   summary: string;
   title: string;
@@ -70,36 +66,6 @@ const priorityLabels = {
   urgent: "Urgent",
 } satisfies Record<CaseWorkspaceDto["case"]["priority"], string>;
 
-function issueKind(issue: CaseWorkspaceIssueDto): CaseControlItemDto["kind"] {
-  if (issue.issueType === "contradiction") {
-    return "conflict";
-  }
-  if (issue.issueType === "revision_drift") {
-    return "revision";
-  }
-  if (issue.issueType === "chronology_gap") {
-    return "timeline";
-  }
-  return "missing";
-}
-
-function issueAction(issue: CaseWorkspaceIssueDto) {
-  if (issue.issueType === "contradiction") {
-    return "Choose controlling source";
-  }
-  if (issue.issueType === "revision_drift") {
-    return "Check current version";
-  }
-  if (issue.issueType === "chronology_gap") {
-    return "Place in timeline";
-  }
-  return "Find support";
-}
-
-function issuePriority(issue: CaseWorkspaceIssueDto) {
-  return issue.severity === "high" ? "high" : issue.severity;
-}
-
 function findSourceRefs(
   sourceSpanIds: string[],
   spans: Map<string, CaseWorkspaceSourceSpanDto>,
@@ -129,69 +95,20 @@ function findSourceRefs(
 }
 
 function toControlItem(
-  issue: CaseWorkspaceIssueDto,
+  item: ReviewWorkItem,
   spans: Map<string, CaseWorkspaceSourceSpanDto>,
   docs: Map<string, { fileName: string; title: string }>,
 ): CaseControlItemDto {
   return {
-    id: issue.id,
-    actionLabel: issueAction(issue),
-    blocking: issue.severity === "high" || issue.issueType === "contradiction",
-    kind: issueKind(issue),
-    priority: issuePriority(issue),
-    sourceRefs: findSourceRefs(issue.sourceSpanIds, spans, docs),
-    summary:
-      issue.description ??
-      issue.provenanceSummary ??
-      caseWorkspaceIssueTypeLabels[issue.issueType],
-    title: issue.title,
+    blocking: item.blocking,
+    id: item.id,
+    kind: item.kind.family,
+    priority: item.priority,
+    reviewPrompt: item.reviewPrompt,
+    sourceRefs: findSourceRefs(item.sourceSpanIds, spans, docs),
+    summary: item.summary,
+    title: item.title,
   };
-}
-
-function toControlItemFromReviewAction(
-  action: CaseReviewActionDto,
-  spans: Map<string, CaseWorkspaceSourceSpanDto>,
-  docs: Map<string, { fileName: string; title: string }>,
-): CaseControlItemDto {
-  return {
-    id: action.id,
-    actionLabel: action.actionLabel,
-    blocking: action.blocking,
-    kind: action.kind,
-    priority: action.priority,
-    sourceRefs: findSourceRefs(action.sourceSpanIds, spans, docs),
-    summary: action.summary,
-    title: action.title,
-  };
-}
-
-function compareIssues(left: CaseWorkspaceIssueDto, right: CaseWorkspaceIssueDto) {
-  return (
-    caseWorkspaceIssueSeverityRank[left.severity] -
-      caseWorkspaceIssueSeverityRank[right.severity] ||
-    right.detectedAt.localeCompare(left.detectedAt) ||
-    left.title.localeCompare(right.title)
-  );
-}
-
-const reviewActionPriorityRank = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-} satisfies Record<CaseReviewActionDto["priority"], number>;
-
-function compareReviewActions(
-  left: CaseReviewActionDto,
-  right: CaseReviewActionDto,
-) {
-  return (
-    reviewActionPriorityRank[left.priority] -
-      reviewActionPriorityRank[right.priority] ||
-    Number(right.blocking) - Number(left.blocking) ||
-    right.updatedAt.localeCompare(left.updatedAt) ||
-    left.title.localeCompare(right.title)
-  );
 }
 
 function sourceRefMatchesGrounding(
@@ -296,15 +213,12 @@ export function buildCaseControlDto(workspace: CaseWorkspaceDto): CaseControlDto
       },
     ]),
   );
-  const queue = reflection.issues
-    .filter((issue) => issue.status === "open")
-    .sort(compareIssues)
-    .map((issue) => toControlItem(issue, spans, docs));
-  const reducedQueue = workspace.reviewActions
-    .filter((action) => action.status === "open")
-    .sort(compareReviewActions)
-    .map((action) => toControlItemFromReviewAction(action, spans, docs));
-  const activeQueue = workspace.reviewActions.length > 0 ? reducedQueue : queue;
+  const activeWorkItems = workspace.reviewWorkItems
+    .filter((item) => item.status === "open")
+    .sort(compareReviewWorkItems);
+  const activeQueue = activeWorkItems.map((item) =>
+    toControlItem(item, spans, docs),
+  );
   const activeItem = activeQueue[0] ?? null;
   const copy = primaryCopy({
     activeItem,

@@ -38,88 +38,71 @@ create index if not exists case_review_reducer_runs_case_completed_idx
     id desc
   );
 
-create table if not exists public.case_review_actions (
+create table if not exists public.case_review_work_items (
   id uuid primary key default gen_random_uuid(),
   case_id uuid not null references public.cases(id) on delete cascade,
-  reducer_run_id uuid not null references public.case_review_reducer_runs(id) on delete cascade,
-  action_key text not null,
+  source_run_id uuid null references public.case_review_reducer_runs(id) on delete cascade,
+  source_type text not null default 'review_reducer',
+  work_item_key text not null,
   kind text not null,
   priority text not null,
-  required_capability text not null default 'operational_followup',
   blocking boolean not null default false,
   status text not null default 'open',
   title text not null,
   summary text not null,
-  action_label text not null,
+  review_prompt text not null,
   source_span_ids uuid[] not null default '{}',
-  raw_refs jsonb not null default '[]'::jsonb,
+  provenance_refs jsonb not null default '[]'::jsonb,
   resolved_at timestamptz null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint case_review_actions_action_key_check check (length(btrim(action_key)) > 0),
-  constraint case_review_actions_title_check check (length(btrim(title)) > 0),
-  constraint case_review_actions_summary_check check (length(btrim(summary)) > 0),
-  constraint case_review_actions_action_label_check check (length(btrim(action_label)) > 0),
-  constraint case_review_actions_kind_check check (
+  constraint case_review_work_items_key_check check (length(btrim(work_item_key)) > 0),
+  constraint case_review_work_items_title_check check (length(btrim(title)) > 0),
+  constraint case_review_work_items_summary_check check (length(btrim(summary)) > 0),
+  constraint case_review_work_items_review_prompt_check check (length(btrim(review_prompt)) > 0),
+  constraint case_review_work_items_kind_check check (
     kind in ('conflict', 'revision', 'timeline', 'missing', 'source_check')
   ),
-  constraint case_review_actions_priority_check check (
+  constraint case_review_work_items_priority_check check (
     priority in ('critical', 'high', 'medium', 'low')
   ),
-  constraint case_review_actions_required_capability_check check (
-    required_capability in (
-      'factual_completion',
-      'source_verification',
-      'legal_judgment',
-      'filing_preparation',
-      'document_version_review',
-      'timeline_management',
-      'operational_followup'
-    )
+  constraint case_review_work_items_source_type_check check (
+    source_type in ('review_reducer', 'workspace_issue', 'document_revision')
   ),
-  constraint case_review_actions_status_check check (
+  constraint case_review_work_items_status_check check (
     status in ('open', 'resolved', 'dismissed')
   ),
-  constraint case_review_actions_raw_refs_array_check check (jsonb_typeof(raw_refs) = 'array'),
-  constraint case_review_actions_case_action_key_unique unique (case_id, action_key)
+  constraint case_review_work_items_provenance_refs_array_check check (jsonb_typeof(provenance_refs) = 'array'),
+  constraint case_review_work_items_case_key_unique unique (case_id, work_item_key)
 );
 
-create index if not exists case_review_actions_run_status_idx
-  on public.case_review_actions (reducer_run_id, status, priority, updated_at desc);
+create index if not exists case_review_work_items_run_status_idx
+  on public.case_review_work_items (source_run_id, status, priority, updated_at desc);
 
-create index if not exists case_review_actions_case_status_idx
-  on public.case_review_actions (case_id, status, priority, updated_at desc);
+create index if not exists case_review_work_items_case_status_idx
+  on public.case_review_work_items (case_id, status, priority, updated_at desc);
 
-create index if not exists case_review_actions_case_capability_status_idx
-  on public.case_review_actions (
-    case_id,
-    required_capability,
-    status,
-    priority,
-    updated_at desc
-  );
-
-create table if not exists public.case_review_action_events (
+create table if not exists public.case_review_work_item_events (
   id uuid primary key default gen_random_uuid(),
   case_id uuid not null references public.cases(id) on delete cascade,
-  action_id uuid not null references public.case_review_actions(id) on delete cascade,
+  work_item_id uuid not null references public.case_review_work_items(id) on delete cascade,
   event_type text not null,
   actor_id text null,
   note text null,
   created_at timestamptz not null default now(),
-  constraint case_review_action_events_type_check check (
+  constraint case_review_work_item_events_type_check check (
     event_type in ('comment', 'resolved', 'dismissed', 'reopened')
   ),
-  constraint case_review_action_events_actor_id_check check (
+  constraint case_review_work_item_events_actor_id_check check (
     actor_id is null or length(btrim(actor_id)) > 0
   ),
-  constraint case_review_action_events_note_check check (
+  constraint case_review_work_item_events_note_check check (
     note is null or length(btrim(note)) > 0
   )
 );
 
-create index if not exists case_review_action_events_action_created_idx
-  on public.case_review_action_events (action_id, created_at desc, id desc);
+create index if not exists case_review_work_item_events_item_created_idx
+  on public.case_review_work_item_events (work_item_id, created_at desc, id desc);
 
 alter table public.harness_run_artifacts
   drop constraint if exists harness_run_artifacts_kind_check;

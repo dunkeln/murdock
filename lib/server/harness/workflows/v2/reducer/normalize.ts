@@ -7,7 +7,6 @@ import {
   type ReviewActionKind,
   type ReviewActionPriority,
   type ReviewActionRawRef,
-  type ReviewActionRequiredCapability,
   type ReviewReducerCandidate,
   reviewReducerCandidateSchema,
 } from "@/lib/contracts/review-reducer";
@@ -53,69 +52,6 @@ function issueAction(issue: CaseWorkspaceIssueDto) {
   }
 
   return "Find support";
-}
-
-function capabilityFromGate(
-  gate: ReviewGate | null,
-): ReviewActionRequiredCapability | null {
-  if (!gate) {
-    return null;
-  }
-
-  if (
-    gate.reasonCodes.includes("external_law") ||
-    gate.reasonCodes.includes("material_conflict") ||
-    gate.requiredCapability === "legal_judgment"
-  ) {
-    return "legal_judgment";
-  }
-
-  if (gate.requiredCapability) {
-    return gate.requiredCapability;
-  }
-
-  if (
-    gate.reasonCodes.includes("no_source") ||
-    gate.reasonCodes.includes("partial_source") ||
-    gate.reasonCodes.includes("low_ocr")
-  ) {
-    return "source_verification";
-  }
-
-  if (gate.reasonCodes.includes("missing_or_unclear")) {
-    return "factual_completion";
-  }
-
-  return null;
-}
-
-function issueCapability(
-  issue: CaseWorkspaceIssueDto,
-  gate: ReviewGate | null,
-): ReviewActionRequiredCapability {
-  const gateCapability = capabilityFromGate(gate);
-
-  if (gateCapability) {
-    return gateCapability;
-  }
-
-  if (issue.issueType === "contradiction") {
-    return "legal_judgment";
-  }
-
-  if (issue.issueType === "revision_drift") {
-    return "document_version_review";
-  }
-
-  if (issue.issueType === "chronology_gap") {
-    return "timeline_management";
-  }
-
-  if (issue.issueType === "missing_context") {
-    return "factual_completion";
-  }
-
-  return "operational_followup";
 }
 
 function issuePriority(
@@ -246,7 +182,6 @@ function workspaceIssueCandidate(input: {
       },
       ...refs,
     ],
-    requiredCapability: issueCapability(input.issue, gate),
     sourceSpanIds: input.issue.sourceSpanIds,
     summary:
       input.issue.description ??
@@ -280,7 +215,6 @@ function revisionCandidate(input: {
     candidateKey: `revision-claim:${input.claim.id}`,
     kind: "revision",
     priority: "medium",
-    requiredCapability: "document_version_review",
     rawRefs: [
       {
         id: input.claim.id,

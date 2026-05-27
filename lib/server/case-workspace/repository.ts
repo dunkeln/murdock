@@ -8,7 +8,7 @@ import type {
   CaseWorkspaceSourceKind,
   CaseWorkspaceSourceSpanDto,
 } from "@/lib/contracts/case-workspace";
-import type { CaseReviewActionDto } from "@/lib/contracts/review-reducer";
+import type { ReviewWorkItem } from "@/lib/contracts/review-work-item";
 import { createNeonSql } from "@/lib/server/adapters/neon";
 import {
   type CaseReviewActionRow,
@@ -17,12 +17,12 @@ import {
   type CaseWorkspaceIssueRow,
   type CaseWorkspaceSourceDocumentRow,
   type CaseWorkspaceSourceSpanRow,
-  toCaseReviewActionDto,
   toCaseWorkspaceChronologyEventDto,
   toCaseWorkspaceFactDto,
   toCaseWorkspaceIssueDto,
   toCaseWorkspaceSourceDocumentDto,
   toCaseWorkspaceSourceSpanDto,
+  toReviewWorkItem,
 } from "@/lib/server/case-workspace/mappers";
 
 export type CaseWorkspaceRecords = {
@@ -31,7 +31,7 @@ export type CaseWorkspaceRecords = {
   facts: CaseWorkspaceFactDto[];
   chronologyEvents: CaseWorkspaceChronologyEventDto[];
   issues: CaseWorkspaceIssueDto[];
-  reviewActions: CaseReviewActionDto[];
+  reviewWorkItems: ReviewWorkItem[];
 };
 
 export type UpsertSourceDocumentInput = {
@@ -118,7 +118,7 @@ function isMissingReviewActionsTable(error: unknown) {
   return (
     message.includes("relation") &&
     message.includes("does not exist") &&
-    (message.includes("public.case_review_actions") ||
+    (message.includes("public.case_review_work_items") ||
       message.includes("public.case_review_reducer_runs"))
   );
 }
@@ -198,23 +198,23 @@ async function getReviewActionRows(
       select
         action.id,
         action.case_id,
-        action.reducer_run_id,
-        action.action_key,
+        action.source_run_id,
+        action.source_type,
+        action.work_item_key,
         action.kind,
         action.priority,
-        action.required_capability,
         action.blocking,
         action.status,
         action.title,
         action.summary,
-        action.action_label,
+        action.review_prompt,
         action.source_span_ids,
-        action.raw_refs,
+        action.provenance_refs,
         action.resolved_at,
         action.created_at,
         action.updated_at
-      from public.case_review_actions action
-      join latest_reducer_run latest on latest.id = action.reducer_run_id
+      from public.case_review_work_items action
+      join latest_reducer_run latest on latest.id = action.source_run_id
       where action.case_id = ${caseId}
       order by
         case action.priority
@@ -355,8 +355,8 @@ export async function getCaseWorkspaceRecordsByCaseId(input: {
     issues: (issueRows as CaseWorkspaceIssueRow[]).map(
       toCaseWorkspaceIssueDto
     ),
-    reviewActions: (reviewActionRows as CaseReviewActionRow[]).map(
-      toCaseReviewActionDto
+    reviewWorkItems: (reviewActionRows as CaseReviewActionRow[]).map(
+      toReviewWorkItem
     ),
   };
 }

@@ -54,6 +54,7 @@ Do not print secrets in logs or client components.
 - `app/` contains Next.js routes and server actions.
 - `components/` contains app UI and shadcn/ui primitives.
 - `lib/contracts/` contains Zod schemas and DTO types shared across UI, server services, repositories, and adapters.
+- `lib/contracts/review-work-item.ts` is the canonical internal contract for human review/actionable units. Reducer output, DB rows, MCP review actions, matter operations, operational signals, and UI control cards should project from `ReviewWorkItem`.
 - `lib/server/` contains server-only code. Keep SDKs, secrets, database clients, and provider calls out of client components.
 - `lib/server/adapters/` contains stateless external API adapters grouped by provider.
 - `lib/server/ai/` contains model routing and provider-neutral AI boundaries. Provider SDK calls belong below this folder and must return typed results through `generateObject`.
@@ -88,6 +89,13 @@ Default feature rule:
 4. Put use-case flow in a service.
 5. Let server actions bridge UI events to services.
 6. Let components project typed state only.
+
+Review work rule:
+
+1. Create or load `ReviewWorkItem` first.
+2. Derive UI, MCP, matter-operation, signal, and ROI-plan payloads from it.
+3. Keep durable review capability labels as derived projection signals, not the source of truth.
+4. Keep MCP-specific opaque refs at the MCP boundary only.
 
 ## MCP Connector
 
@@ -138,7 +146,7 @@ public HTTP endpoint; keep auth checks in the route and permission checks in
 the service. Do not add MCP tools that bypass the typed workspace DTOs.
 
 MCP outputs must not expose app-specific metadata or database identifiers. Use
-MCP-scoped opaque refs (`action_...`, `doc_...`, `span_...`, `claim_...`) for
+MCP-scoped opaque refs (`action_...`, `issue_...`, `doc_...`, `span_...`, `claim_...`) for
 follow-up calls, and resolve those refs back to internal UUIDs only inside
 `lib/server/mcp/v1/service.ts`. Do not return raw UUIDs, reducer run IDs, raw
 refs, OCR conversion IDs, document hashes, case document IDs, or source span ID
@@ -151,6 +159,15 @@ and sample titles while hiding raw refs and source span IDs. Clients should
 then call `get_case_review_group` for one selected group. Use narrower
 provenance tools like `get_open_review_actions`, `get_source_span`, and
 `search_case_evidence` only after the user asks for evidence or detail.
+Use `get_roi_review_plan` when the user wants a small set of next-step choices;
+it deterministically ranks canonical review work items and returns opaque
+review refs only.
+`get_open_review_actions` projects canonical review work items; in cases where
+the reducer has not materialized rows yet, open workspace issues can appear as
+`issue_...` refs through the same shape.
+Use `preview_review_transition_plan` for dry-run transition previews. Do not add
+mass write tools until transition persistence and review UX are intentionally
+designed.
 
 Avoid these cognitive-load traps:
 
