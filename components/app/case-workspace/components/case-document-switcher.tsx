@@ -181,6 +181,12 @@ export function CaseDocumentSwitcher({
       <SheetContent
         className="w-[min(25rem,calc(100vw-1.5rem))] border-t border-l border-paper/15 bg-ink text-paper shadow-none"
         data-case-document-switcher
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          event.preventDefault();
+        }}
         overlayClassName="top-14 bg-transparent supports-backdrop-filter:backdrop-blur-none"
         showCloseButton={false}
         side="right"

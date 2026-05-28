@@ -17,7 +17,8 @@ const runtimeMcpToolNameSchema = z.enum([
   "get_open_review_actions",
   "get_document_updates",
   "get_operational_signals",
-  "get_roi_review_plan",
+  "get_case_action_queue",
+  "get_actionable_choices",
   "get_source_span",
   "search_case_evidence",
 ]);
@@ -45,7 +46,8 @@ const runtimeMcpAliases = {
   get_open_review_actions: "Checked open actions",
   get_document_updates: "Checked document updates",
   get_operational_signals: "Checked case signals",
-  get_roi_review_plan: "Planned review options",
+  get_case_action_queue: "Checked task queue",
+  get_actionable_choices: "Planned review options",
   get_source_span: "Checked supporting evidence",
   search_case_evidence: "Searched case evidence",
 } satisfies Record<RuntimeMcpToolName, string>;
@@ -78,6 +80,38 @@ type McpSelectionResult =
       message: string;
       ok: false;
     };
+
+function shouldForceActionQueue(question: string) {
+  return /\b(task|tasks|queue|queued|todo|to-do|follow[- ]?up|progress|pending work|next steps?)\b/i.test(
+    question,
+  );
+}
+
+function withForcedRuntimeCalls(input: {
+  calls: McpRuntimeCall[];
+  caseId: string;
+  question: string;
+}) {
+  if (!shouldForceActionQueue(input.question)) {
+    return input.calls;
+  }
+
+  if (input.calls.some((call) => call.name === "get_case_action_queue")) {
+    return input.calls;
+  }
+
+  return [
+    {
+      input: {
+        caseId: input.caseId,
+        includeDone: true,
+        limit: 25,
+      },
+      name: "get_case_action_queue" as const,
+    },
+    ...input.calls,
+  ].slice(0, 4);
+}
 
 export type WorkspaceMcpContextResult =
   | {
@@ -157,7 +191,7 @@ async function selectMcpRuntimeCalls(input: {
       "Select the read-only Murdock MCP calls needed to answer the user question.",
     schemaName: "murdock_workspace_mcp_tool_selection_v1",
     system:
-      "You are the Murdock MCP connector. Select only read-only MCP tools needed for the user question. Do not answer the question. Do not request raw database access. Prefer one or two focused calls.",
+      "You are the Murdock MCP connector. Select only read-only MCP tools needed for the user question. Do not answer the question. Do not request raw database access. Prefer one or two focused calls. Use get_case_action_queue for questions about queued tasks, pending work, follow-ups, progress, next steps, task status, or drafting communications based on already chosen work.",
     temperature: 0,
     use: "workspace-query",
   });
@@ -237,7 +271,11 @@ export async function prepareWorkspaceMcpContext(input: {
   }
 
   const mcpResults = await runMcpRuntimeCalls({
-    calls: selectedCalls.calls,
+    calls: withForcedRuntimeCalls({
+      calls: selectedCalls.calls,
+      caseId: input.caseId,
+      question: input.question,
+    }),
     subscriber,
   });
   const mcpError = firstMcpError(mcpResults);

@@ -83,3 +83,23 @@ export const matterOperationEvents = pgTable("matter_operation_events", {
   note: text("note"),
   operationId: uuid("operation_id").notNull(),
 });
+
+export const caseActionTasks = pgTable("case_action_tasks", {
+  actor: text("actor").notNull(),
+  caseId: uuid("case_id").notNull(),
+  connectorHint: text("connector_hint"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdBy: text("created_by"),
+  description: text("description").notNull(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  kind: text("kind").notNull(),
+  priority: text("priority").notNull(),
+  provenanceRefs: jsonb("provenance_refs").$type<unknown[]>().notNull(),
+  sourceReviewRefs: text("source_review_refs").array().notNull(),
+  sourceSpanRefs: text("source_span_refs").array().notNull(),
+  sourceType: text("source_type").notNull(),
+  status: text("status").notNull(),
+  taskKey: text("task_key").notNull(),
+  title: text("title").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});

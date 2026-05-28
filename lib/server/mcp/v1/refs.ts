@@ -12,7 +12,8 @@ export type McpRefPrefix =
   | "operation"
   | "plan"
   | "signal"
-  | "span";
+  | "span"
+  | "task";
 
 export function opaqueMcpRef(prefix: McpRefPrefix, id: string) {
   const digest = createHash("sha256")

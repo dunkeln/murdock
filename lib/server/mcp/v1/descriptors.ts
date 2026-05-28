@@ -9,6 +9,11 @@ import {
 } from "@/lib/contracts/mcp";
 
 const toolMetadata = {
+  get_harness_view: {
+    description:
+      "Return the canonical harness view for a case, including final matter state, temporal events, diffs, review work items, and provenance-bearing source data.",
+    title: "Get harness view",
+  },
   get_case_context: {
     description:
       "Return a bounded case workspace slice with documents, facts, chronology, issues, review actions, or source spans. Use for explicit section requests; prefer get_case_review_digest for broad questions about what needs attention.",
@@ -34,6 +39,11 @@ const toolMetadata = {
       "Return the current operational matter state projected from review actions and document updates. Use this for broad questions about what is still active, blocked, resolved, ignored, untracked, or superseded.",
     title: "Get matter snapshot",
   },
+  get_case_action_queue: {
+    description:
+      "Return the sticky case action queue. Use this as shared task memory for agents that need queued legal process steps before planning or executing work.",
+    title: "Get case action queue",
+  },
   get_open_review_actions: {
     description:
       "Return unresolved reduced review actions, optionally with their source spans for provenance. Use for follow-up detail; prefer get_case_review_digest for broad review summaries.",
@@ -44,9 +54,14 @@ const toolMetadata = {
       "Return a deterministic temporal signal projection from documents, document updates, and reduced review actions. Use this to understand what operationally changed without relying on workflow status labels.",
     title: "Get operational signals",
   },
+  get_actionable_choices: {
+    description:
+      "Return two or three bounded high-ROI actionable choices over the canonical harness view. Use when the user wants the next smallest useful review move.",
+    title: "Get actionable choices",
+  },
   get_roi_review_plan: {
     description:
-      "Return two or three bounded high-ROI review plan choices over open review items. Use after digest-level orientation when the user wants the next smallest useful review move.",
+      "Compatibility alias for get_actionable_choices.",
     title: "Get ROI review plan",
   },
   get_source_span: {
@@ -73,6 +88,11 @@ const toolMetadata = {
     description:
       "Append a case-scoped audit event for a review action and update action status for resolved, dismissed, or reopened events.",
     title: "Record review action event",
+  },
+  upsert_case_action_task: {
+    description:
+      "Create or update a sticky case action task linked to review actions, source spans, and provenance. Use this to queue legal process steps for later connector or artifact execution.",
+    title: "Upsert case action task",
   },
   search_case_evidence: {
     description:

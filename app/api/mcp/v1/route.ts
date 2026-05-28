@@ -8,40 +8,7 @@ import { MURDOCK_MCP_VERSION } from "@/lib/contracts/mcp";
 
 export const runtime = "nodejs";
 
-function isAuthorized(request: Request) {
-  const token = process.env.MURDOCK_MCP_API_TOKEN?.trim();
-
-  if (!token) {
-    return true;
-  }
-
-  return request.headers.get("authorization") === `Bearer ${token}`;
-}
-
-function jsonRpcUnauthorized() {
-  return NextResponse.json(
-    {
-      error: {
-        code: -32001,
-        message: "Unauthorized MCP request.",
-      },
-      id: null,
-      jsonrpc: "2.0",
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store",
-      },
-      status: 401,
-    },
-  );
-}
-
-export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return jsonRpcUnauthorized();
-  }
-
+export async function GET() {
   return NextResponse.json(
     {
       name: "murdock-contained-mcp",
@@ -58,10 +25,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return jsonRpcUnauthorized();
-  }
-
   let rawRequest: unknown;
 
   try {

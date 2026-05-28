@@ -176,9 +176,9 @@ async function runSourceHarness(input: {
   source: SourceInput;
 }): Promise<HarnessBundleResult | ShapeError> {
   const observer = input.observerForSource?.(input.source, input.index);
+  const workflow = selectedHarnessWorkflow();
   const result =
-    selectedHarnessWorkflow() === "v2" &&
-    input.source.conversion.documentAnnotation !== null
+    workflow !== "v1" && input.source.conversion.documentAnnotation !== null
       ? await runHarnessV2FromAnnotatedConversion({
           annotation: input.source.conversion.documentAnnotation,
           caseId: input.caseId,

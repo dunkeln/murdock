@@ -6,10 +6,16 @@ export type CurrentUser = {
   displayName: string;
 };
 
+function envValue(name: string, fallback: string): string {
+  const value = process.env[name]?.trim();
+
+  return value && value.length > 0 ? value : fallback;
+}
+
 export async function getCurrentUser(): Promise<CurrentUser> {
   return {
-    id: "dev-user",
-    firmId: "dev-firm",
-    displayName: "Dev user",
+    id: envValue("MURDOCK_DEMO_USER_ID", "dev-user"),
+    firmId: envValue("MURDOCK_DEMO_FIRM_ID", "dev-firm"),
+    displayName: envValue("MURDOCK_DEMO_DISPLAY_NAME", "Dev user"),
   };
 }

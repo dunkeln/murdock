@@ -20,6 +20,20 @@ NEON_CONN_URL=
 MISTRAL_API_KEY=
 ```
 
+Shared demo identity variables:
+
+```bash
+MURDOCK_DEMO_USER_ID=dev-user
+MURDOCK_DEMO_FIRM_ID=dev-firm
+MURDOCK_DEMO_DISPLAY_NAME="Demo user"
+```
+
+These are the minimal live-demo auth seam. The browser app and MCP service both
+call `getCurrentUser()`, so they see the same cases when these variables point
+to the same seeded `public.cases.user_id`. Do not use this shared identity for
+real client data; replace it with session/OAuth-backed users before production
+multi-tenant access.
+
 Optional Langfuse tracing environment variables:
 
 ```bash
@@ -117,17 +131,15 @@ npm run dev
 ```
 
 Claude Desktop should launch the bridge directly so stdout remains pure
-JSON-RPC:
+JSON-RPC. The bridge loads `.env` and `.env.local` from the repo before reading
+`MURDOCK_*`, so Claude Desktop does not need duplicate local env entries:
 
 ```json
 {
   "mcpServers": {
     "murdock": {
       "command": "node",
-      "args": ["/Users/prateek/code/murdock/scripts/murdock-mcp-stdio.mjs"],
-      "env": {
-        "MURDOCK_MCP_HTTP_URL": "http://localhost:3000/api/mcp/v1"
-      }
+      "args": ["/Users/prateek/code/murdock/scripts/murdock-mcp-stdio.mjs"]
     }
   }
 }
@@ -140,10 +152,16 @@ MURDOCK_MCP_API_TOKEN=
 MURDOCK_MCP_TIMEOUT_MS=30000
 ```
 
-If `MURDOCK_MCP_API_TOKEN` is present in the Next.js server environment, the
-same token must be present in the Claude connector environment. The route is a
-public HTTP endpoint; keep auth checks in the route and permission checks in
-the service. Do not add MCP tools that bypass the typed workspace DTOs.
+If `MURDOCK_MCP_API_TOKEN` is present in the Next.js server environment, keep the
+same token in this repo's `.env` for local Claude Desktop. Explicit env values
+in Claude still override `.env` when needed. The route is a public HTTP
+endpoint; keep auth checks in the route and permission checks in the service. Do
+not add MCP tools that bypass the typed workspace DTOs.
+
+For a low-friction live demo, set `MURDOCK_DEMO_USER_ID` to the same user id that
+owns the cases you want visible in the app. Claude MCP calls then resolve
+through that same server-side identity and return the same case list as
+`/dashboard`.
 
 MCP outputs must not expose app-specific metadata or database identifiers. Use
 MCP-scoped opaque refs (`action_...`, `issue_...`, `doc_...`, `span_...`, `claim_...`) for
@@ -456,3 +474,38 @@ The app should remain cloud-deployable:
 - Prefer durable jobs for OCR and document processing.
 - Scope data by user or firm before exposing it to UI routes.
 - Return typed objects and structured errors from external API surfaces.
+
+### Vercel Demo Deploy
+
+For a low-friction demo deploy, use the bundled Vercel helper:
+
+```bash
+npm run deploy:demo
+```
+
+That command reads local `.env`, normalizes the split `NEON_CONN_URL`
+`&channel_binding=require` value, maps `LANGFUSE_BASE_URL` to `LANGFUSE_HOST`,
+syncs the required environment variables into Vercel preview, and runs `vercel`.
+
+For production:
+
+```bash
+npm run deploy:prod
+```
+
+If Vercel asks for auth, run `npx vercel login` once and rerun the command. The
+helper links the repo to a Vercel project automatically when `.vercel/project.json`
+does not exist. To only sync environment variables without deploying:
+
+```bash
+npm run deploy:demo:env
+```
+
+To verify what would be synced without touching Vercel:
+
+```bash
+node scripts/vercel-demo-deploy.mjs --dry-run
+```
+
+`vercel.json` sets API function duration to 300 seconds so demo OCR and harness
+requests have enough room to complete on Vercel Hobby.

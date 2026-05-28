@@ -86,7 +86,9 @@ yarn-error.log*
 next-env.d.ts
 
 # local databases and large binary artifacts
-/db
+/db/*
+!/db/migrations/
+!/db/migrations/*.sql
 /db/data/
 /db/local/
 /db/tmp/
@@ -126,7 +128,7 @@ next-env.d.ts
 # local agent navigation notes
 /index.md
 /APP.md
-/interview notes.markdown
+/interview_notes.md
 /*.notes.md
 /*.scratch.md
 /*.local.md

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Copy } from "lucide-react";
+import type { ReactNode } from "react";
 import type { CSSProperties } from "react";
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
@@ -110,6 +111,61 @@ function parseSseChunk(buffer: string) {
     .join("\n");
 }
 
+function textFromNode(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(textFromNode).join("");
+  }
+
+  if (React.isValidElement<{ children?: ReactNode }>(node)) {
+    return textFromNode(node.props.children);
+  }
+
+  return "";
+}
+
+function emailDraftFromPre(children: ReactNode) {
+  if (
+    !React.isValidElement<{
+      children?: ReactNode;
+      className?: string;
+    }>(children)
+  ) {
+    return null;
+  }
+
+  const className = children.props.className ?? "";
+
+  if (!className.split(/\s+/).includes("language-email")) {
+    return null;
+  }
+
+  return textFromNode(children.props.children).replace(/\n$/, "");
+}
+
+function EmailDraftBlock({ content }: { content: string }) {
+  return (
+    <div className="relative overflow-hidden border border-paper/20 bg-paper/[0.06] p-4 pr-12 text-paper">
+      <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-6">
+        {content}
+      </pre>
+      <Button
+        aria-label="Copy email draft"
+        className="hover-theme-invert absolute bottom-3 right-3 size-7 rounded-none border border-paper/15 bg-ink p-0 text-paper"
+        onClick={() => copyMessage(content)}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <Copy data-icon="inline-start" />
+      </Button>
+    </div>
+  );
+}
+
 function ChatMarkdown({ content }: { content: string }) {
   return (
     <ReactMarkdown
@@ -124,8 +180,8 @@ function ChatMarkdown({ content }: { content: string }) {
             {children}
           </a>
         ),
-        code: ({ children }) => (
-          <code className="bg-paper/10 px-1 font-mono text-[0.92em]">
+        code: ({ children, className }) => (
+          <code className={cn("bg-paper/10 px-1 font-mono text-[0.92em]", className)}>
             {children}
           </code>
         ),
@@ -149,11 +205,19 @@ function ChatMarkdown({ content }: { content: string }) {
           <ol className="list-decimal space-y-1 pl-5">{children}</ol>
         ),
         p: ({ children }) => <p>{children}</p>,
-        pre: ({ children }) => (
-          <pre className="overflow-x-auto bg-paper/10 p-2 font-mono text-xs">
-            {children}
-          </pre>
-        ),
+        pre: ({ children }) => {
+          const emailDraft = emailDraftFromPre(children);
+
+          if (emailDraft !== null) {
+            return <EmailDraftBlock content={emailDraft} />;
+          }
+
+          return (
+            <pre className="overflow-x-auto bg-paper/10 p-2 font-mono text-xs">
+              {children}
+            </pre>
+          );
+        },
         ul: ({ children }) => (
           <ul className="list-disc space-y-1 pl-5">{children}</ul>
         ),
@@ -268,7 +332,19 @@ export function CaseChatComposer({
   placeholder = "Ask from the current case context...",
 }: CaseChatComposerProps) {
   const [draft, setDraft] = React.useState("");
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const canSubmit = draft.trim().length > 0 && !isStreaming && !disabled;
+
+  React.useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [draft]);
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -304,19 +380,21 @@ export function CaseChatComposer({
     <form
       aria-label="Case chat input"
       className={cn(
-        "flex shrink-0 items-center gap-3 border border-paper/15 bg-ink px-3 py-2",
+        "flex shrink-0 items-end gap-3 border border-paper/15 bg-ink px-3 py-2",
         className,
       )}
       onSubmit={submit}
     >
       <Textarea
         aria-label="Message"
-        className="h-10 min-h-10 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-sm text-paper placeholder:text-paper/35 focus-visible:border-transparent focus-visible:ring-0 md:text-sm [field-sizing:fixed]"
+        className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-sm leading-5 text-paper placeholder:text-paper/35 focus-visible:border-transparent focus-visible:ring-0 md:text-sm [field-sizing:fixed]"
         disabled={isStreaming || disabled}
         name="message"
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={submitOnEnter}
         placeholder={placeholder}
+        ref={textareaRef}
+        rows={1}
         value={draft}
       />
       <Button
@@ -449,7 +527,7 @@ export function CaseChatSurface({
       {showJumpToLatest ? (
         <Button
           aria-label="Jump to latest message"
-          className="hover-theme-invert absolute bottom-3 left-1/2 size-8 -translate-x-1/2 rounded-none border border-paper/20 bg-ink p-0 text-paper shadow-none"
+          className="hover-theme-invert absolute bottom-3 right-2 z-10 size-8 rounded-none border border-paper/20 bg-ink p-0 text-paper shadow-none"
           onClick={() => scrollToLatest()}
           size="icon-sm"
           type="button"

@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { Clock } from "lucide-react";
 
 import { useIngestedFiles } from "@/components/app/ingested-files-context";
+import { Button } from "@/components/ui/button";
 import {
   buildCaseControlDto,
   filterCaseControlBySourceGrounding,
@@ -18,6 +20,7 @@ import {
   CaseChatSurface,
   useCaseChatStream,
 } from "./components/case-chat-surface";
+import { CaseChronologySurface } from "./components/case-chronology-surface";
 import { CaseControlPanel } from "./components/case-control-panel";
 import {
   CaseDocumentSwitcher,
@@ -27,9 +30,16 @@ import {
   CaseFileReviewSurface,
   type CaseFileReviewSurfaceMode,
 } from "./components/case-file-review-surface";
-import { ReviewActionPipeline } from "./components/review-action-pipeline";
+import {
+  ReviewActionContent,
+  ReviewActionTrigger,
+  subscribeCaseActionQueueSync,
+} from "./components/review-action-pipeline";
 import { WorkspaceInputFooter } from "./components/workspace-input-footer";
-import { sharedWorkspaceSurfaceWidthClass } from "./components/workspace-surface";
+import {
+  sharedWorkspaceSurfaceWidthClass,
+  WorkspaceSurface,
+} from "./components/workspace-surface";
 
 type CaseWorkspaceViewProps = {
   initialChatMessages?: CaseChatMessageDto[];
@@ -79,10 +89,9 @@ const documentSwitcherWidthClass =
   "w-fit max-w-full shrink-0";
 
 const workspaceHeaderClass =
-  "flex shrink-0 items-start justify-between gap-6";
-
-const planningLayoutClass =
-  "grid min-h-0 grid-cols-1 items-stretch gap-5 xl:flex-1 xl:grid-cols-[minmax(28rem,0.75fr)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden";
+  "flex shrink-0 min-w-0 flex-col gap-2";
+const workspaceHeaderTopRowClass =
+  "flex min-w-0 items-start justify-between gap-6";
 
 function activeReviewItemIdFor(
   control: CaseControlDto,
@@ -132,12 +141,14 @@ export function CaseWorkspaceView({
   workspace,
 }: CaseWorkspaceViewProps) {
   const intake = useIngestedFiles();
-  const fileReviewSurfaceRef = React.useRef<HTMLDivElement | null>(null);
   const control = buildCaseControlDto(workspace);
   const firstItemId = control.queue[0]?.id ?? null;
   const [activeReviewItemId, setActiveReviewItemId] = React.useState<string | null>(
     firstItemId,
   );
+  const [showChronology, setShowChronology] = React.useState(false);
+  const [showActionItems, setShowActionItems] = React.useState(false);
+  const [actionTaskCount, setActionTaskCount] = React.useState(0);
   const sourceDocuments = workspace.sourceDocuments;
   const [previewedDocumentId, setPreviewedDocumentId] = React.useState<string | null>(
     previewedDocumentIdForSourceKey(workspace, initialPreviewedSourceKey),
@@ -195,6 +206,8 @@ export function CaseWorkspaceView({
           label: document.fileName,
           onPreviewChange: (previewed: boolean) => {
             if (previewed) {
+              setShowActionItems(false);
+              setShowChronology(false);
               intake.onPreviewFile(null);
               setPreviewedDocumentId(document.id);
               replacePreviewedSourceParam(document.sourceKey);
@@ -229,6 +242,10 @@ export function CaseWorkspaceView({
               );
             },
             onPreviewChange: (previewed: boolean) => {
+              if (previewed) {
+                setShowActionItems(false);
+                setShowChronology(false);
+              }
               setPreviewedDocumentId(null);
               intake.onPreviewFile(previewed ? item.id : null);
               replacePreviewedSourceParam(null);
@@ -270,7 +287,10 @@ export function CaseWorkspaceView({
     [documentRevisions, previewedDocument],
   );
   const showWorkspaceSurface = showStandaloneControlPanel || showFilePreviewSurface;
-  const showActionPipeline = control.queue.length > 0;
+  const hasActionItems = control.queue.length > 0 || actionTaskCount > 0;
+  const hasChronology = workspace.chronologyEvents.length > 0;
+  const showActionItemsSurface = showActionItems && hasActionItems;
+  const showChronologySurface = showChronology && hasChronology;
   const effectiveActiveReviewItemId = activeReviewItemIdFor(
     control,
     activeReviewItemId,
@@ -285,46 +305,43 @@ export function CaseWorkspaceView({
       : showStandaloneControlPanel
         ? "control-only"
         : "source-only";
+
   React.useEffect(() => {
-    if (!showFilePreviewSurface) {
-      return;
+    let cancelled = false;
+
+    async function refreshActionTaskCount() {
+      try {
+        const response = await fetch(
+          `/api/cases/${workspace.case.id}/reviewer-plan/action`,
+          {
+            cache: "no-store",
+            headers: { "Content-Type": "application/json" },
+            method: "GET",
+          },
+        );
+        const data = await response.json();
+
+        if (!cancelled && response.ok && Array.isArray(data.tasks)) {
+          setActionTaskCount(data.tasks.length);
+        }
+      } catch {
+        if (!cancelled) {
+          setActionTaskCount(0);
+        }
+      }
     }
 
-    function dismissPreviewOnOutsidePointerDown(event: PointerEvent) {
-      const target = event.target;
+    void refreshActionTaskCount();
 
-      if (!(target instanceof Node)) {
-        return;
-      }
-
-      if (fileReviewSurfaceRef.current?.contains(target)) {
-        return;
-      }
-
-      if (
-        target instanceof Element &&
-        target.closest("[data-case-document-switcher]")
-      ) {
-        return;
-      }
-
-      clearPreviewedSource();
-    }
-
-    document.addEventListener(
-      "pointerdown",
-      dismissPreviewOnOutsidePointerDown,
-      { capture: true },
-    );
+    const unsubscribe = subscribeCaseActionQueueSync(workspace.case.id, () => {
+      void refreshActionTaskCount();
+    });
 
     return () => {
-      document.removeEventListener(
-        "pointerdown",
-        dismissPreviewOnOutsidePointerDown,
-        { capture: true },
-      );
+      cancelled = true;
+      unsubscribe();
     };
-  }, [clearPreviewedSource, showFilePreviewSurface]);
+  }, [workspace.case.id]);
 
   return (
     <div
@@ -341,18 +358,88 @@ export function CaseWorkspaceView({
       >
         <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col gap-4">
           <header className={workspaceHeaderClass}>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate font-heading text-3xl uppercase leading-none text-paper md:text-4xl">
-                {control.case.title}
-              </h1>
+            <div className={workspaceHeaderTopRowClass}>
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate font-heading text-3xl uppercase leading-none text-paper md:text-4xl">
+                  {control.case.title}
+                </h1>
+              </div>
+              <div className="flex w-fit shrink-0 flex-col items-end gap-2">
+                <CaseDocumentSwitcher
+                  className={documentSwitcherWidthClass}
+                  items={documentSwitcherItems}
+                />
+                {hasChronology ? (
+                  <Button
+                    aria-label="Chronology"
+                    className={cn(
+                      "hover-theme-invert h-9 rounded-none border-paper/15 bg-ink px-2.5 text-paper",
+                      showChronologySurface && "active-theme-invert",
+                    )}
+                    onClick={() => {
+                      clearPreviewedSource();
+                      setShowActionItems(false);
+                      setShowChronology((current) => !current);
+                    }}
+                    size="icon-sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Clock aria-hidden />
+                  </Button>
+                ) : null}
+                {hasActionItems ? (
+                  <ReviewActionTrigger
+                    className={showActionItemsSurface ? "active-theme-invert" : undefined}
+                    onClick={() => {
+                      setShowChronology(false);
+                      setShowActionItems((current) => !current);
+                    }}
+                    queuedCount={actionTaskCount}
+                  />
+                ) : null}
+              </div>
             </div>
-            <CaseDocumentSwitcher
-              className={documentSwitcherWidthClass}
-              items={documentSwitcherItems}
-            />
           </header>
 
-          {showWorkspaceSurface ? (
+          {showChronologySurface ? (
+            <WorkspaceSurface
+              className={cn(
+                "relative -mt-16 flex-1 bg-ink xl:self-center",
+                sharedWorkspaceSurfaceWidthClass,
+              )}
+              data-case-chronology-surface
+            >
+              <div className="mx-auto flex min-h-0 w-[70%] max-w-full flex-1 flex-col">
+                <CaseChronologySurface
+                  className="flex min-h-0 flex-1 flex-col"
+                  events={workspace.chronologyEvents}
+                  sourceDocuments={sourceDocuments}
+                  sourceSpans={workspace.sourceSpans}
+                />
+              </div>
+            </WorkspaceSurface>
+          ) : showActionItemsSurface ? (
+            <WorkspaceSurface
+              className={cn(
+                "relative h-full min-h-0 flex-1 overflow-hidden bg-ink xl:self-center",
+                sharedWorkspaceSurfaceWidthClass,
+              )}
+              data-case-action-items-surface
+              mode="content"
+            >
+              <div className="flex h-full min-h-0 w-full flex-1 flex-col px-6 pb-4 pt-6">
+                <ReviewActionContent
+                  activeReviewItemId={effectiveActiveReviewItemId}
+                  className="flex min-h-0 flex-1 flex-col"
+                  control={control}
+                  onActiveReviewItemChange={setActiveReviewItemId}
+                  onActionQueueCountChange={setActionTaskCount}
+                  sourceDocuments={sourceDocuments}
+                />
+              </div>
+            </WorkspaceSurface>
+          ) : showWorkspaceSurface ? (
             <div
               className={cn(
                 "grid w-full min-w-0 gap-5",
@@ -371,7 +458,7 @@ export function CaseWorkspaceView({
               {showFilePreviewSurface ? (
                 <div
                   className={sourceSurfaceClassByMode[workspaceLayoutMode]}
-                  ref={fileReviewSurfaceRef}
+                  data-case-preview-boundary
                 >
                   <CaseFileReviewSurface
                     activeReviewItemId={effectiveGroundedReviewItemId}
@@ -386,19 +473,6 @@ export function CaseWorkspaceView({
                 </div>
               ) : null}
             </div>
-          ) : showActionPipeline ? (
-            <div className={planningLayoutClass} data-case-planning-layout>
-              <ReviewActionPipeline
-                activeReviewItemId={effectiveActiveReviewItemId}
-                className="min-h-[24rem] xl:h-full xl:min-h-0"
-                control={control}
-                onActiveReviewItemChange={setActiveReviewItemId}
-              />
-              <CaseChatSurface
-                chat={chat}
-                className="min-h-[28rem] xl:h-full xl:min-h-0 xl:flex-1"
-              />
-            </div>
           ) : (
             <CaseChatSurface
               chat={chat}
@@ -410,7 +484,7 @@ export function CaseWorkspaceView({
       <WorkspaceInputFooter initialOperationalReady={control.footerEnabled}>
         {({ disabledReason, operationalReady }) => (
           <CaseChatComposer
-            className="mx-auto w-full max-w-2xl"
+            className="absolute bottom-3 left-1/2 mx-auto w-full max-w-2xl -translate-x-1/2"
             disabled={!operationalReady}
             disabledReason={disabledReason}
             isStreaming={chat.isStreaming}

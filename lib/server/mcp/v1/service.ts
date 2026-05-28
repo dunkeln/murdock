@@ -10,6 +10,8 @@ import {
   getCaseReviewDigestOutputSchema,
   getCaseContextOutputSchema,
   getDocumentUpdatesOutputSchema,
+  getCaseActionQueueOutputSchema,
+  getHarnessViewOutputSchema,
   getMatterSnapshotOutputSchema,
   getOpenReviewActionsOutputSchema,
   getOperationalSignalsOutputSchema,
@@ -22,6 +24,7 @@ import {
   murdockMcpToolNameSchema,
   recordReviewActionEventOutputSchema,
   searchCaseEvidenceOutputSchema,
+  upsertCaseActionTaskOutputSchema,
 } from "@/lib/contracts/mcp";
 import { reviewWorkItemSchema } from "@/lib/contracts/review-work-item";
 import { buildOperationalSignals } from "@/lib/operational-signals";
@@ -33,6 +36,14 @@ import {
 import { listCurrentUserCaseSummaries } from "@/lib/server/cases/service";
 import { getDocumentRevisionSummariesByCaseId } from "@/lib/server/revisions/repository";
 import { getMatterOperationalSnapshot } from "@/lib/server/matter-operations/service";
+import {
+  listCaseActionTasks,
+  upsertCaseActionTask,
+} from "@/lib/server/case-action-tasks/service";
+import {
+  getCurrentUserHarnessViewById,
+  getCurrentUserHarnessViewBySlug,
+} from "@/lib/server/harness-view/service";
 import { toolDescriptors } from "@/lib/server/mcp/v1/descriptors";
 import { MurdockMcpServiceError } from "@/lib/server/mcp/v1/errors";
 import { evidenceMatches } from "@/lib/server/mcp/v1/evidence-search";
@@ -43,6 +54,7 @@ import {
   mapFact,
   mapIssue,
   mapMatterOperation,
+  mapCaseActionTask,
   mapOperationalSignal,
   mapReviewAction,
   mapRevisionSummary,
@@ -61,29 +73,33 @@ import { recordReviewActionEvent } from "@/lib/server/mcp/v1/review-events";
 import {
   buildReviewDigest,
   buildReviewGroup,
-  buildRoiReviewPlan,
   statusAfterReviewEvent,
   transitionPreviewWarnings,
 } from "@/lib/server/mcp/v1/review-planning";
+import { buildActionableChoices } from "@/lib/server/subagents/actionables/service";
 
 type MurdockMcpDependencies = {
   getCurrentUser: typeof getCurrentUser;
   getDocumentRevisionSummariesByCaseId: typeof getDocumentRevisionSummariesByCaseId;
   getMatterOperationalSnapshot: typeof getMatterOperationalSnapshot;
+  listCaseActionTasks: typeof listCaseActionTasks;
   getWorkspaceById: typeof getCurrentUserCaseWorkspaceById;
   getWorkspaceBySlug: typeof getCurrentUserCaseWorkspaceBySlug;
   listCases: typeof listCurrentUserCaseSummaries;
   recordReviewActionEvent: typeof recordReviewActionEvent;
+  upsertCaseActionTask: typeof upsertCaseActionTask;
 };
 
 const defaultDependencies: MurdockMcpDependencies = {
   getCurrentUser,
   getDocumentRevisionSummariesByCaseId,
   getMatterOperationalSnapshot,
+  listCaseActionTasks,
   getWorkspaceById: getCurrentUserCaseWorkspaceById,
   getWorkspaceBySlug: getCurrentUserCaseWorkspaceBySlug,
   listCases: listCurrentUserCaseSummaries,
   recordReviewActionEvent,
+  upsertCaseActionTask,
 };
 
 async function loadWorkspace(
@@ -103,6 +119,24 @@ async function loadWorkspace(
   }
 
   return result.workspace;
+}
+
+async function loadHarnessView(caseRef: MurdockMcpCaseRef) {
+  const result = caseRef.caseId
+    ? await getCurrentUserHarnessViewById(caseRef.caseId)
+    : await getCurrentUserHarnessViewBySlug(
+        caseRef.caseRef ?? caseRef.caseSlug ?? "",
+      );
+
+  if (!result.ok) {
+    throw new MurdockMcpServiceError(
+      result.error.errorCategory === "not_found" ? "not_found" : "unknown",
+      result.error.message,
+      result.error.isRetryable,
+    );
+  }
+
+  return result.harnessView;
 }
 
 function toolData<TName extends MurdockMcpToolName>(
@@ -195,6 +229,26 @@ type McpToolHandler = (
   deps: MurdockMcpDependencies,
 ) => Promise<unknown> | unknown;
 
+async function handleActionableChoices(
+  input: unknown,
+  deps: MurdockMcpDependencies,
+) {
+  const parsed = murdockMcpInputSchemas.get_actionable_choices.parse(input);
+  const harnessView = await loadHarnessView(parsed);
+  const tasks = await deps.listCaseActionTasks({
+    caseId: harnessView.case.id,
+    includeDone: false,
+    limit: 100,
+  });
+
+  return buildActionableChoices({
+    activeReviewRef: parsed.activeReviewRef ?? null,
+    harnessView,
+    maxChoices: parsed.maxChoices,
+    tasks,
+  });
+}
+
 const toolHandlers = {
   list_cases: async (input, deps) => {
     const parsed = murdockMcpInputSchemas.list_cases.parse(input);
@@ -204,6 +258,13 @@ const toolHandlers = {
       cases: cases.slice(0, parsed.limit).map(caseSummary),
       generatedAt: nowIso(),
     });
+  },
+
+  get_harness_view: async (input) => {
+    const parsed = murdockMcpInputSchemas.get_harness_view.parse(input);
+    const harnessView = await loadHarnessView(parsed);
+
+    return getHarnessViewOutputSchema.parse(harnessView);
   },
 
   get_case_context: async (input, deps) => {
@@ -331,16 +392,9 @@ const toolHandlers = {
     });
   },
 
-  get_roi_review_plan: async (input, deps) => {
-    const parsed = murdockMcpInputSchemas.get_roi_review_plan.parse(input);
-    const workspace = await loadWorkspace(parsed, deps);
+  get_actionable_choices: handleActionableChoices,
 
-    return buildRoiReviewPlan({
-      activeReviewRef: parsed.activeReviewRef ?? null,
-      maxChoices: parsed.maxChoices,
-      workspace,
-    });
-  },
+  get_roi_review_plan: handleActionableChoices,
 
   get_matter_snapshot: async (input, deps) => {
     const parsed = murdockMcpInputSchemas.get_matter_snapshot.parse(input);
@@ -357,6 +411,22 @@ const toolHandlers = {
       currentOperations: snapshot.currentOperations.map(mapMatterOperation),
       generatedAt: snapshot.generatedAt,
       historyIncluded: parsed.includeHistory,
+    });
+  },
+
+  get_case_action_queue: async (input, deps) => {
+    const parsed = murdockMcpInputSchemas.get_case_action_queue.parse(input);
+    const workspace = await loadWorkspace(parsed, deps);
+    const tasks = await deps.listCaseActionTasks({
+      caseId: workspace.case.id,
+      includeDone: parsed.includeDone,
+      limit: parsed.limit,
+    });
+
+    return getCaseActionQueueOutputSchema.parse({
+      case: caseSummary(workspace.case),
+      generatedAt: nowIso(),
+      tasks: tasks.map(mapCaseActionTask),
     });
   },
 
@@ -447,6 +517,33 @@ const toolHandlers = {
       action: mapReviewAction(updatedAction),
       eventType: parsed.eventType,
       generatedAt: nowIso(),
+    });
+  },
+
+  upsert_case_action_task: async (input, deps) => {
+    const parsed = murdockMcpInputSchemas.upsert_case_action_task.parse(input);
+    const workspace = await loadWorkspace(parsed, deps);
+    const user = await deps.getCurrentUser();
+    const task = await deps.upsertCaseActionTask({
+      actor: parsed.actor,
+      caseId: workspace.case.id,
+      connectorHint: parsed.connectorHint,
+      createdBy: user.id,
+      description: parsed.description,
+      kind: parsed.kind,
+      priority: parsed.priority,
+      provenanceRefs: parsed.provenanceRefs,
+      sourceReviewRefs: parsed.sourceReviewRefs,
+      sourceSpanRefs: parsed.sourceSpanRefs,
+      sourceType: parsed.sourceType,
+      status: parsed.status,
+      taskKey: parsed.taskKey,
+      title: parsed.title,
+    });
+
+    return upsertCaseActionTaskOutputSchema.parse({
+      generatedAt: nowIso(),
+      task: mapCaseActionTask(task),
     });
   },
 } satisfies Record<MurdockMcpToolName, McpToolHandler>;

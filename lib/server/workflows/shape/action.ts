@@ -3,7 +3,6 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { harnessErrorSchema } from "@/lib/contracts/harness";
-import { HARNESS_V2_VERSION } from "@/lib/contracts/harness-v2";
 import type { DocumentRevisionSummaryDto } from "@/lib/contracts/document-revisions";
 import { getCurrentUser } from "@/lib/server/auth/current-user";
 import { getCaseSummaryByUserAndId } from "@/lib/server/cases/repository";
@@ -28,7 +27,7 @@ import {
   type HarnessBundleResult,
   type SourceInput,
 } from "@/lib/server/workflows/shape/project";
-import { reduceHarnessV2ReviewActions } from "@/lib/server/harness/workflows/v2/reducer";
+import { runReducerSubagent } from "@/lib/server/subagents/reducer/service";
 import { getDocumentRevisionSummariesByCaseId } from "@/lib/server/revisions/repository";
 import { generateDocumentRevisionsForWorkspace } from "@/lib/server/revisions/workflow";
 import {
@@ -41,7 +40,10 @@ import {
   type ShapeResult,
 } from "@/lib/server/workflows/shape/schema";
 import { partitionSourcesByHarnessState } from "@/lib/server/workflows/shape/source-selection";
-import { selectedHarnessVersion } from "@/lib/server/workflows/shape/version";
+import {
+  selectedHarnessVersion,
+  selectedHarnessWorkflow,
+} from "@/lib/server/workflows/shape/version";
 
 function threadId(caseId: string) {
   return `case:${caseId}:workspace-control`;
@@ -453,7 +455,9 @@ export async function shapeCurrentUserWorkspaceFromOcr(
           // Revision candidates are a post-persistence branch and must not fail shaping.
         }
 
-        if (selectedHarnessVersion() === HARNESS_V2_VERSION) {
+        const harnessWorkflow = selectedHarnessWorkflow();
+
+        if (harnessWorkflow !== "v1") {
           const reducerOrdinal = 1100;
           const reducerStepName = "review-reducer";
 
@@ -465,7 +469,7 @@ export async function shapeCurrentUserWorkspaceFromOcr(
               sourceKey: null,
               stepName: reducerStepName,
             });
-            const reducerResult = await reduceHarnessV2ReviewActions({
+            const reducerResult = await runReducerSubagent({
               bundles: shapeResult.bundles,
               caseId: parsed.caseId,
               harnessRunId: runId,
@@ -487,7 +491,10 @@ export async function shapeCurrentUserWorkspaceFromOcr(
                 validationErrors: reducerResult.validationErrors,
               },
               caseId: parsed.caseId,
-              kind: "v2_review_reducer",
+              kind:
+                harnessWorkflow === "v2"
+                  ? "v2_review_reducer"
+                  : "v3_review_reducer",
               ordinal: reducerOrdinal,
               runId,
               sourceKey: null,

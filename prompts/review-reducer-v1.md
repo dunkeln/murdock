@@ -46,6 +46,10 @@ Prefer one clear action when several raw records share:
 - Any G3 hard gate, material conflict, or legal-judgment item must remain blocking.
 - Revision claims must remain tied to before/after document versions.
 - If an item cannot be safely grouped, return it as its own action.
+- Prefer the fewest actions that preserve all blocking distinctions.
+- Group when: same form section OR same field family OR same document page AND same review task type.
+- Split when: items require independent human decisions, different assignees, or different gate states.
+- A group should map to one human sitting down and completing one bounded task.
 </rules>
 
 <writing_style>
@@ -82,6 +86,14 @@ Input pattern: revision claims where one complaint version removed an issue and 
 Expected reduction:
 One action titled "Confirm current complaint review items" tied to both before/after version labels and all revision claim candidates.
 </example>
+
+<example>
+Input pattern: three missing fields on page 4 and one G3 hard gate conflict on page 4 about the same party.
+Expected reduction:
+Two actions — one grouped action for the three missing fields, one standalone blocking action for the conflict.
+Grouping them would hide the blocking state.
+</example>
+
 </examples>
 
 <final_reminders>

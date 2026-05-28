@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  type LangfuseGenerationAttributes,
   propagateAttributes,
   startActiveObservation,
   updateActiveObservation,
@@ -16,6 +17,10 @@ type ObserveOptions<TOutput> = {
   metadata?: TelemetryMetadata;
   name: string;
   output?: (value: TOutput) => unknown;
+};
+
+type GenerationOptions<TOutput> = ObserveOptions<TOutput> & {
+  generation?: (value: TOutput) => LangfuseGenerationAttributes;
 };
 
 type TraceOptions<TOutput> = ObserveOptions<TOutput> & {
@@ -74,6 +79,43 @@ export async function withLangfuseObservation<TOutput>(
     },
     {
       asType: "span",
+    }
+  );
+}
+
+export async function withLangfuseGeneration<TOutput>(
+  options: GenerationOptions<TOutput>,
+  fn: () => Promise<TOutput>
+): Promise<TOutput> {
+  return startActiveObservation(
+    options.name,
+    async () => {
+      updateActiveObservation({
+        input: options.input,
+        metadata: options.metadata,
+      });
+
+      try {
+        const output = await fn();
+
+        updateActiveObservation({
+          ...(options.generation ? options.generation(output) : {}),
+          output: options.output ? options.output(output) : undefined,
+        });
+
+        return output;
+      } catch (error) {
+        updateActiveObservation({
+          level: "ERROR",
+          statusMessage:
+            error instanceof Error ? error.message : "Unexpected error",
+        });
+
+        throw error;
+      }
+    },
+    {
+      asType: "generation",
     }
   );
 }

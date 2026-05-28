@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { CaseWorkspaceDto } from "@/lib/contracts/case-workspace";
+import type { CaseActionTask } from "@/lib/contracts/case-action-tasks";
 import type { DocumentRevisionSummaryDto } from "@/lib/contracts/document-revisions";
 import type { MatterOperationDto } from "@/lib/contracts/matter-operations";
 import type { OperationalSignalDto } from "@/lib/contracts/operational-signals";
@@ -190,6 +191,25 @@ export function mapMatterOperation(operation: MatterOperationDto) {
     summary: operation.summary,
     title: operation.title,
     updatedAt: operation.updatedAt,
+  };
+}
+
+export function mapCaseActionTask(task: CaseActionTask) {
+  return {
+    actor: task.actor,
+    connectorHint: task.connectorHint,
+    description: task.description,
+    kind: task.kind,
+    priority: task.priority,
+    provenanceRefCount: task.provenanceRefs.length,
+    sourceReviewRefs: task.sourceReviewRefs,
+    sourceSpanRefs: task.sourceSpanRefs,
+    sourceType: task.sourceType,
+    status: task.status,
+    taskKey: task.taskKey,
+    taskRef: opaqueMcpRef("task", task.id),
+    title: task.title,
+    updatedAt: task.updatedAt,
   };
 }
 

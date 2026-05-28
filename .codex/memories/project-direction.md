@@ -62,6 +62,22 @@ AG-UI is an internal typed event/action transport for this slice, not an SSE run
 
 Versioning matters for both harness contracts and workflows. The current internal contract is `harness.v1`, and workflows live under versioned paths such as `workflows/v1`.
 
+Progress on May 27, 2026: `harness.v3` is now the default workflow identity. The selector returns v3 when `HARNESS_WORKFLOW_VERSION` is unset or explicitly set to `v3`; `v1` and `v2` are now compatibility modes that must be requested through `HARNESS_WORKFLOW_VERSION=v1` or `HARNESS_WORKFLOW_VERSION=v2`.
+
+V3 is the MIME-aware harness track. The product direction is:
+
+```text
+uploaded source
+-> MIME/type router
+-> source-specific extractor
+-> canonical source records
+-> findings / conflicts / chronology / review gates
+-> workspace projection
+-> reducer and action queue
+```
+
+Current implementation note: v3 currently routes through the annotation-backed compiler path for compatibility while MIME-specific extractors are built out. Do not treat this as a finished MIME compiler. Treat it as the default versioned track that future PDF, DOCX, HTML/email, spreadsheet, image, text, and markdown extractors should plug into.
+
 The V1 contract is compressed around five primitives: `SourceSpan`, `FindingDraft`, `Finding`, `Conflict`, and `ReviewGate`. `FindingDraft` is the intuitive model/human-facing surface; `Finding` remains the strict internal operational record. Facts, timelines, issue lists, and control panels are projections over those primitives, not separate model-owned engines.
 
 Use a tolerant-reader funnel before commitment: provider-facing drafts may carry bounded `extras` for metadata such as section, form line, table cell, artifact reference, calculation, or currency, but source spans and final findings/conflicts/gates stay strict. Unknown draft metadata is pass-through context only unless app code explicitly promotes it later.
@@ -170,6 +186,10 @@ Provenance remains essential but should be soft-revealed. Show enough context to
 The document/source surface remains primary. During uploads or shaping, the source should remain readable while matter context quietly prepares. Use matter/source language such as "Reading", "Adding source to matter", or "Matter context updated"; avoid "OCR", "workspace controls", "AI controls", and other implementation language in normal UX copy.
 
 Wide-screen layout must be based on actual CSS viewport and available app space, not physical monitor size. The current case route uses conditional layout behavior: without a file rail, side-by-side source/attention can start earlier; with the uploaded file rail present, side-by-side waits until a wider breakpoint so the PDF is not squeezed. The route also constrains the workspace width to avoid sprawling across very large monitors.
+
+Decision on May 27, 2026: keep the primary Action Items decision surface as issue cards with recommended choices, not a data table. The legal operator's first job is to decide the next move on a few high-ROI items, so cards reduce cognitive load by preserving one issue, its summary, and its choices in a single local context. Use a compact "Task queue" snapshot for reconciled or deferred work, modeled like a sticky progress memory that can be retrieved by MCP and passed across agents.
+
+TanStack Table remains a good future fit for a secondary queue-management surface once the product needs sort, filter, row selection, bulk reconciliation, assignment, due dates, or large task volumes. It should not replace the current Action Items cards because the table mental model optimizes operations over many rows, while the current surface optimizes legal judgment over a small set of agent-recommended choices.
 
 ## Failure Memory
 

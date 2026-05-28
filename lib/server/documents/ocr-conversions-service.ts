@@ -23,6 +23,7 @@ import {
   withLangfuseObservation,
   withLangfuseTrace,
 } from "@/lib/server/telemetry/langfuse";
+import { selectedHarnessWorkflow } from "@/lib/server/workflows/shape/version";
 
 const OCR_PROVIDER = "mistral";
 
@@ -59,7 +60,7 @@ function getFileExtension(fileName: string) {
 }
 
 function shouldUseHarnessV2Annotations() {
-  return process.env.HARNESS_WORKFLOW_VERSION === "v2";
+  return selectedHarnessWorkflow() !== "v1";
 }
 
 export async function ensureCurrentFirmMistralOcrConversion(

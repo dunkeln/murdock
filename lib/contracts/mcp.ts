@@ -29,6 +29,13 @@ import {
   matterOperationStateSchema,
 } from "@/lib/contracts/matter-operations";
 import {
+  caseActionTaskKindSchema,
+  caseActionTaskActorSchema,
+  caseActionTaskSourceSchema,
+  caseActionTaskStatusSchema,
+} from "@/lib/contracts/case-action-tasks";
+import { canonicalHarnessViewSchema } from "@/lib/contracts/harness-view";
+import {
   reviewWorkItemFamilySchema,
   reviewWorkItemPrioritySchema,
   reviewWorkItemStatusSchema,
@@ -39,7 +46,7 @@ export const MURDOCK_MCP_VERSION = "murdock-mcp.v1";
 
 export const mcpOpaqueRefSchema = z
   .string()
-  .regex(/^(doc|span|fact|event|issue|action|claim|signal|operation|plan)_[a-f0-9]{16}$/);
+  .regex(/^(doc|span|fact|event|issue|action|claim|signal|operation|plan|task)_[a-f0-9]{16}$/);
 
 export const mcpReviewActionRefSchema = mcpOpaqueRefSchema.refine(
   (value) => value.startsWith("action_"),
@@ -53,6 +60,7 @@ export const mcpReviewWorkItemRefSchema = mcpOpaqueRefSchema.refine(
 
 export const murdockMcpToolNameSchema = z.enum([
   "list_cases",
+  "get_harness_view",
   "get_case_context",
   "list_case_documents",
   "get_case_review_digest",
@@ -60,12 +68,15 @@ export const murdockMcpToolNameSchema = z.enum([
   "get_open_review_actions",
   "get_document_updates",
   "get_matter_snapshot",
+  "get_case_action_queue",
   "get_operational_signals",
+  "get_actionable_choices",
   "get_roi_review_plan",
   "get_source_span",
   "preview_review_transition_plan",
   "search_case_evidence",
   "record_review_action_event",
+  "upsert_case_action_task",
 ]);
 
 export type MurdockMcpToolName = z.infer<typeof murdockMcpToolNameSchema>;
@@ -112,6 +123,10 @@ export const listCasesOutputSchema = z.object({
   cases: z.array(mcpCaseSummarySchema),
   generatedAt: isoDateTimeSchema,
 });
+
+export const getHarnessViewInputSchema = murdockMcpCaseRefSchema;
+
+export const getHarnessViewOutputSchema = canonicalHarnessViewSchema;
 
 export const caseContextSectionSchema = z.enum([
   "documents",
@@ -426,6 +441,59 @@ export const getMatterSnapshotOutputSchema = z.object({
   historyIncluded: z.boolean(),
 });
 
+export const mcpCaseActionTaskSchema = z.object({
+  actor: caseActionTaskActorSchema,
+  connectorHint: z.string().min(1).nullable(),
+  description: z.string().min(1),
+  kind: caseActionTaskKindSchema,
+  priority: reviewWorkItemPrioritySchema,
+  provenanceRefCount: z.number().int().nonnegative(),
+  sourceReviewRefs: z.array(mcpReviewWorkItemRefSchema),
+  sourceSpanRefs: z.array(mcpOpaqueRefSchema),
+  sourceType: caseActionTaskSourceSchema,
+  status: caseActionTaskStatusSchema,
+  taskKey: z.string().min(1),
+  taskRef: mcpOpaqueRefSchema,
+  title: z.string().min(1),
+  updatedAt: isoDateTimeSchema,
+});
+
+export const getCaseActionQueueInputSchema = murdockMcpCaseRefSchema.extend({
+  includeDone: z.boolean().default(false),
+  limit: z.number().int().positive().max(100).default(50),
+});
+
+export const getCaseActionQueueOutputSchema = z.object({
+  case: mcpCaseSummarySchema,
+  generatedAt: isoDateTimeSchema,
+  tasks: z.array(mcpCaseActionTaskSchema),
+});
+
+export const upsertCaseActionTaskInputSchema = murdockMcpCaseRefSchema.extend({
+  actor: caseActionTaskActorSchema.default("case_team"),
+  connectorHint: z.string().trim().min(1).max(120).nullable().default(null),
+  description: z.string().trim().min(1).max(1000),
+  kind: caseActionTaskKindSchema,
+  priority: reviewWorkItemPrioritySchema.default("medium"),
+  provenanceRefs: z.array(z.unknown()).default([]),
+  sourceReviewRefs: z.array(mcpReviewWorkItemRefSchema).default([]),
+  sourceSpanRefs: z.array(mcpOpaqueRefSchema).default([]),
+  sourceType: caseActionTaskSourceSchema.default("agent_memory"),
+  status: caseActionTaskStatusSchema.default("queued"),
+  taskKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(160)
+    .regex(/^[a-z0-9:_-]+$/),
+  title: z.string().trim().min(1).max(160),
+});
+
+export const upsertCaseActionTaskOutputSchema = z.object({
+  generatedAt: isoDateTimeSchema,
+  task: mcpCaseActionTaskSchema,
+});
+
 export const getSourceSpanInputSchema = murdockMcpCaseRefSchema.extend({
   sourceSpanRef: mcpOpaqueRefSchema,
 });
@@ -491,6 +559,7 @@ export const roiReviewPlanEventTypeSchema = z.enum([
 
 export const roiReviewPlanChoiceSchema = z.object({
   affectedReviewRefs: z.array(mcpReviewWorkItemRefSchema).min(1).max(12),
+  actor: caseActionTaskActorSchema.default("case_team"),
   choiceRef: mcpOpaqueRefSchema,
   detail: z.string().min(1).max(180),
   eventType: roiReviewPlanEventTypeSchema,
@@ -503,6 +572,7 @@ export const roiReviewPlanChoiceSchema = z.object({
   rationale: z.string().min(1).max(240),
   risk: roiReviewPlanRiskSchema,
   stageState: roiReviewPlanStageStateSchema,
+  taskKind: caseActionTaskKindSchema.default("mark_for_case_team_review"),
   tone: roiReviewPlanChoiceToneSchema,
 });
 
@@ -566,10 +636,13 @@ export const murdockMcpInputSchemas = {
   get_case_review_digest: getCaseReviewDigestInputSchema,
   get_case_review_group: getCaseReviewGroupInputSchema,
   get_case_context: getCaseContextInputSchema,
+  get_case_action_queue: getCaseActionQueueInputSchema,
+  get_harness_view: getHarnessViewInputSchema,
   get_document_updates: getDocumentUpdatesInputSchema,
   get_matter_snapshot: getMatterSnapshotInputSchema,
   get_open_review_actions: getOpenReviewActionsInputSchema,
   get_operational_signals: getOperationalSignalsInputSchema,
+  get_actionable_choices: getRoiReviewPlanInputSchema,
   get_roi_review_plan: getRoiReviewPlanInputSchema,
   get_source_span: getSourceSpanInputSchema,
   list_case_documents: listCaseDocumentsInputSchema,
@@ -577,16 +650,20 @@ export const murdockMcpInputSchemas = {
   preview_review_transition_plan: previewReviewTransitionPlanInputSchema,
   record_review_action_event: recordReviewActionEventInputSchema,
   search_case_evidence: searchCaseEvidenceInputSchema,
+  upsert_case_action_task: upsertCaseActionTaskInputSchema,
 } satisfies Record<MurdockMcpToolName, z.ZodType>;
 
 export const murdockMcpOutputSchemas = {
   get_case_review_digest: getCaseReviewDigestOutputSchema,
   get_case_review_group: getCaseReviewGroupOutputSchema,
   get_case_context: getCaseContextOutputSchema,
+  get_case_action_queue: getCaseActionQueueOutputSchema,
+  get_harness_view: getHarnessViewOutputSchema,
   get_document_updates: getDocumentUpdatesOutputSchema,
   get_matter_snapshot: getMatterSnapshotOutputSchema,
   get_open_review_actions: getOpenReviewActionsOutputSchema,
   get_operational_signals: getOperationalSignalsOutputSchema,
+  get_actionable_choices: getRoiReviewPlanOutputSchema,
   get_roi_review_plan: getRoiReviewPlanOutputSchema,
   get_source_span: getSourceSpanOutputSchema,
   list_case_documents: listCaseDocumentsOutputSchema,
@@ -594,6 +671,7 @@ export const murdockMcpOutputSchemas = {
   preview_review_transition_plan: previewReviewTransitionPlanOutputSchema,
   record_review_action_event: recordReviewActionEventOutputSchema,
   search_case_evidence: searchCaseEvidenceOutputSchema,
+  upsert_case_action_task: upsertCaseActionTaskOutputSchema,
 } satisfies Record<MurdockMcpToolName, z.ZodType>;
 
 export const murdockMcpToolSuccessSchema = z.object({

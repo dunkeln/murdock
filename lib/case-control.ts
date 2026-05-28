@@ -71,7 +71,7 @@ function findSourceRefs(
   spans: Map<string, CaseWorkspaceSourceSpanDto>,
   docs: Map<string, { fileName: string; title: string }>,
 ): CaseControlSourceRef[] {
-  return sourceSpanIds.slice(0, 2).flatMap((spanId) => {
+  return sourceSpanIds.flatMap((spanId) => {
     const span = spans.get(spanId);
 
     if (!span) {

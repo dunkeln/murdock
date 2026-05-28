@@ -48,6 +48,7 @@ export type HarnessRunArtifactKind =
   | "segments"
   | "v2_document_annotation"
   | "v2_review_reducer"
+  | "v3_review_reducer"
   | "extracted_findings"
   | "bundle"
   | "error";

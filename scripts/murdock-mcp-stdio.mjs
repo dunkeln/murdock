@@ -1,7 +1,77 @@
 #!/usr/bin/env node
 
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import process from "node:process";
 import readline from "node:readline";
+import { fileURLToPath } from "node:url";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(scriptDir, "..");
+
+function parseEnvValue(rawValue) {
+  const trimmed = rawValue.trim();
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+
+  return trimmed.replace(/\s+#.*$/, "");
+}
+
+function readEnvFile(envPath) {
+  if (!existsSync(envPath)) {
+    return {};
+  }
+
+  const parsed = {};
+  const contents = readFileSync(envPath, "utf8");
+
+  for (const line of contents.split(/\r?\n/)) {
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const normalized = trimmed.startsWith("export ")
+      ? trimmed.slice("export ".length).trim()
+      : trimmed;
+    const separatorIndex = normalized.indexOf("=");
+
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = normalized.slice(0, separatorIndex).trim();
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      continue;
+    }
+
+    parsed[key] = parseEnvValue(normalized.slice(separatorIndex + 1));
+  }
+
+  return parsed;
+}
+
+function loadRepoEnv() {
+  const merged = {
+    ...readEnvFile(resolve(projectRoot, ".env")),
+    ...readEnvFile(resolve(projectRoot, ".env.local")),
+  };
+
+  for (const [key, value] of Object.entries(merged)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadRepoEnv();
 
 const endpoint =
   process.env.MURDOCK_MCP_HTTP_URL ?? "http://localhost:3000/api/mcp/v1";

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import type { CaseChatStreamEvent } from "@/lib/contracts/case-chat";
+import type { Usage } from "@/lib/server/ai/types";
 import {
   completeAssistantMessage,
   createCurrentUserCaseChatUserMessage,
@@ -13,10 +14,17 @@ import {
 } from "@/lib/server/case-chat/service";
 import { prepareWorkspaceMcpContext } from "@/lib/server/case-workspace/query";
 import { streamText } from "@/lib/server/ai/stream-text";
+import {
+  withLangfuseGeneration,
+  withLangfuseObservation,
+  withLangfuseTrace,
+} from "@/lib/server/telemetry/langfuse";
 
 export const runtime = "nodejs";
 
 const promptPath = join(process.cwd(), "prompts", "case-chat-answer-v1.md");
+const runtimePromptName = "case-chat-answer-v1";
+const runtimePromptLabel = process.env.LANGFUSE_RUNTIME_PROMPT_LABEL ?? "local";
 
 const requestSchema = z.object({
   message: z.string().trim().min(1).max(2000),
@@ -44,6 +52,52 @@ function memoryForModel(memory: Awaited<ReturnType<typeof prepareCaseChatMemory>
       content: message.content,
       createdAt: message.createdAt,
     })),
+  };
+}
+
+function nonNullUsageDetails(usage: Usage) {
+  return Object.fromEntries(
+    Object.entries({
+      input: usage.inputTokens,
+      output: usage.outputTokens,
+      cacheCreationInput: usage.cacheCreationInputTokens,
+      cacheReadInput: usage.cacheReadInputTokens,
+    }).filter((entry): entry is [string, number] => typeof entry[1] === "number"),
+  );
+}
+
+function mcpContextTelemetry(
+  result: Awaited<ReturnType<typeof prepareWorkspaceMcpContext>>,
+) {
+  if (!result.ok) {
+    return {
+      contextOk: false,
+      errorCategory: result.errorCategory,
+      selectedToolCount: 0,
+    };
+  }
+
+  const labels = result.mcpToolResults.map((item) => item.contextLabel);
+  const actionQueueResult = result.mcpToolResults.find(
+    (item) => item.contextLabel === "Checked task queue",
+  );
+  const actionQueueSize =
+    actionQueueResult?.ok &&
+    actionQueueResult.data &&
+    typeof actionQueueResult.data === "object" &&
+    "tasks" in actionQueueResult.data &&
+    Array.isArray(actionQueueResult.data.tasks)
+      ? actionQueueResult.data.tasks.length
+      : 0;
+
+  return {
+    actionQueueSize,
+    contextOk: true,
+    contextTraceEvents: result.contextTrace.length,
+    hasActionQueue: Boolean(actionQueueResult),
+    selectedToolCount: result.mcpToolResults.length,
+    selectedTools: labels.join(",").slice(0, 200),
+    successfulToolCount: result.mcpToolResults.filter((item) => item.ok).length,
   };
 }
 
@@ -111,109 +165,292 @@ export async function POST(request: Request, context: RouteContext) {
             message: userMessageResult.message,
           });
 
-          const memory = await prepareCaseChatMemory({
-            thread: userMessageResult.thread,
-          });
-          const mcpContext = await prepareWorkspaceMcpContext({
-            caseId,
-            question: parsedBody.data.message,
-            subscriber: (event) => {
-              write({
-                type: "context_trace",
-                event,
-              });
-            },
-          });
-
-          if (!mcpContext.ok) {
-            write({
-              type: "error",
-              message: mcpContext.message,
-            });
-            close();
-            return;
-          }
-
-          const assistantMessage = await createStreamingAssistantMessage({
-            caseId,
-            threadId: userMessageResult.thread.id,
-            userId: userMessageResult.user.id,
-          });
-          assistantMessageId = assistantMessage.id;
-
-          const streamResult = await streamText({
-            allowFallback: false,
-            maxOutputTokens: 1200,
-            messages: [
-              {
-                role: "user",
-                content: JSON.stringify(
-                  {
-                    question: parsedBody.data.message,
-                    conversationMemory: memoryForModel(memory),
-                    mcpToolResults: mcpContext.mcpToolResults,
-                  },
-                  null,
-                  2,
-                ),
+          await withLangfuseTrace(
+            {
+              name: "case.runtime_chat",
+              userId: userMessageResult.user.id,
+              sessionId: `case:${caseId}:thread:${userMessageResult.thread.id}`,
+              tags: [
+                "feature:runtime-chat",
+                "agent:runtime",
+                "surface:case-chat",
+                "harness:v3",
+              ],
+              input: {
+                caseId,
+                messageLength: parsedBody.data.message.length,
               },
-            ],
-            onDelta: (delta) => {
-              assistantText += delta;
-              write({
-                type: "assistant_delta",
-                delta,
-              });
+              metadata: {
+                caseId,
+                promptLabel: runtimePromptLabel,
+                promptName: runtimePromptName,
+                surface: "case-chat",
+                threadId: userMessageResult.thread.id,
+              },
+              output: (result) => result,
             },
-            preferredProvider: "anthropic",
-            system: await prompt(),
-            temperature: 0,
-            use: "workspace-query",
-          });
-
-          if (!streamResult.ok) {
-            if (assistantText.trim().length > 0) {
-              await completeAssistantMessage({
-                content: assistantText,
-                contextTrace: mcpContext.contextTrace,
-                inputTokens: null,
-                messageId: assistantMessage.id,
-                model: null,
-                outputTokens: null,
-                provider: null,
-              });
-            } else {
-              await failAssistantMessage({
-                error: {
-                  errorCategory: streamResult.error.errorCategory,
-                  message: streamResult.error.message,
+            async () => {
+              const memory = await withLangfuseObservation(
+                {
+                  name: "runtime.memory.load",
+                  metadata: {
+                    caseId,
+                    threadId: userMessageResult.thread.id,
+                  },
+                  output: (result) => ({
+                    hasSummary: Boolean(result.summary),
+                    recentMessages: result.messages.length,
+                  }),
                 },
-                messageId: assistantMessage.id,
+                async () =>
+                  prepareCaseChatMemory({
+                    thread: userMessageResult.thread,
+                  }),
+              );
+              const mcpContext = await withLangfuseObservation(
+                {
+                  name: "runtime.context.select",
+                  input: {
+                    caseId,
+                    messageLength: parsedBody.data.message.length,
+                  },
+                  metadata: {
+                    caseId,
+                    threadId: userMessageResult.thread.id,
+                  },
+                  output: mcpContextTelemetry,
+                },
+                async () =>
+                  prepareWorkspaceMcpContext({
+                    caseId,
+                    question: parsedBody.data.message,
+                    subscriber: (event) => {
+                      write({
+                        type: "context_trace",
+                        event,
+                      });
+                    },
+                  }),
+              );
+
+              if (!mcpContext.ok) {
+                write({
+                  type: "error",
+                  message: mcpContext.message,
+                });
+                close();
+                return {
+                  errorCategory: mcpContext.errorCategory,
+                  ok: false,
+                  stage: "context",
+                };
+              }
+
+              const assistantMessage = await withLangfuseObservation(
+                {
+                  name: "runtime.message.create",
+                  metadata: {
+                    caseId,
+                    threadId: userMessageResult.thread.id,
+                  },
+                  output: (message) => ({
+                    messageId: message.id,
+                  }),
+                },
+                async () =>
+                  createStreamingAssistantMessage({
+                    caseId,
+                    threadId: userMessageResult.thread.id,
+                    userId: userMessageResult.user.id,
+                  }),
+              );
+              assistantMessageId = assistantMessage.id;
+
+              const streamResult = await withLangfuseGeneration(
+                {
+                  name: "runtime.model.stream",
+                  input: {
+                    contextResultCount: mcpContext.mcpToolResults.length,
+                    hasConversationSummary: Boolean(memory.summary),
+                    maxOutputTokens: 1200,
+                    messageLength: parsedBody.data.message.length,
+                    promptLabel: runtimePromptLabel,
+                    promptName: runtimePromptName,
+                    temperature: 0,
+                  },
+                  metadata: {
+                    caseId,
+                    promptLabel: runtimePromptLabel,
+                    promptName: runtimePromptName,
+                    selectedToolCount: mcpContext.mcpToolResults.length,
+                    threadId: userMessageResult.thread.id,
+                  },
+                  generation: (result) =>
+                    result.ok
+                      ? {
+                          model: result.model,
+                          modelParameters: {
+                            maxOutputTokens: 1200,
+                            temperature: 0,
+                          },
+                          usageDetails: nonNullUsageDetails(result.usage),
+                        }
+                      : {},
+                  output: (result) =>
+                    result.ok
+                      ? {
+                          model: result.model,
+                          ok: true,
+                          outputLength: result.data.length,
+                          provider: result.provider,
+                          usage: result.usage,
+                        }
+                      : {
+                          errorCategory: result.error.errorCategory,
+                          isRetryable: result.error.isRetryable,
+                          ok: false,
+                        },
+                },
+                async () =>
+                  streamText({
+                    allowFallback: false,
+                    maxOutputTokens: 1200,
+                    messages: [
+                      {
+                        role: "user",
+                        content: JSON.stringify(
+                          {
+                            question: parsedBody.data.message,
+                            conversationMemory: memoryForModel(memory),
+                            mcpToolResults: mcpContext.mcpToolResults,
+                          },
+                          null,
+                          2,
+                        ),
+                      },
+                    ],
+                    onDelta: (delta) => {
+                      assistantText += delta;
+                      write({
+                        type: "assistant_delta",
+                        delta,
+                      });
+                    },
+                    preferredProvider: "anthropic",
+                    system: await prompt(),
+                    temperature: 0,
+                    use: "workspace-query",
+                  }),
+              );
+
+              if (!streamResult.ok) {
+                if (assistantText.trim().length > 0) {
+                  await withLangfuseObservation(
+                    {
+                      name: "runtime.message.persist_partial",
+                      metadata: {
+                        caseId,
+                        threadId: userMessageResult.thread.id,
+                      },
+                      output: (message) => ({
+                        messageId: message.id,
+                        outputLength: message.content.length,
+                        status: message.status,
+                      }),
+                    },
+                    async () =>
+                      completeAssistantMessage({
+                        content: assistantText,
+                        contextTrace: mcpContext.contextTrace,
+                        inputTokens: null,
+                        messageId: assistantMessage.id,
+                        model: null,
+                        outputTokens: null,
+                        provider: null,
+                      }),
+                  );
+                } else {
+                  await withLangfuseObservation(
+                    {
+                      name: "runtime.message.fail",
+                      metadata: {
+                        caseId,
+                        errorCategory: streamResult.error.errorCategory,
+                        threadId: userMessageResult.thread.id,
+                      },
+                      output: (message) => ({
+                        messageId: message.id,
+                        status: message.status,
+                      }),
+                    },
+                    async () =>
+                      failAssistantMessage({
+                        error: {
+                          errorCategory: streamResult.error.errorCategory,
+                          message: streamResult.error.message,
+                        },
+                        messageId: assistantMessage.id,
+                      }),
+                  );
+                }
+                write({
+                  type: "error",
+                  message: streamResult.error.message,
+                });
+                close();
+                return {
+                  errorCategory: streamResult.error.errorCategory,
+                  ok: false,
+                  stage: "model",
+                };
+              }
+
+              const completedMessage = await withLangfuseObservation(
+                {
+                  name: "runtime.message.persist",
+                  metadata: {
+                    caseId,
+                    model: streamResult.model,
+                    provider: streamResult.provider,
+                    threadId: userMessageResult.thread.id,
+                  },
+                  output: (message) => ({
+                    inputTokens: message.inputTokens,
+                    messageId: message.id,
+                    model: message.model,
+                    outputLength: message.content.length,
+                    outputTokens: message.outputTokens,
+                    provider: message.provider,
+                    status: message.status,
+                  }),
+                },
+                async () =>
+                  completeAssistantMessage({
+                    content: streamResult.data || assistantText,
+                    contextTrace: mcpContext.contextTrace,
+                    inputTokens: streamResult.usage.inputTokens,
+                    messageId: assistantMessage.id,
+                    model: streamResult.model,
+                    outputTokens: streamResult.usage.outputTokens,
+                    provider: streamResult.provider,
+                  }),
+              );
+
+              write({
+                type: "assistant_done",
+                message: completedMessage,
               });
-            }
-            write({
-              type: "error",
-              message: streamResult.error.message,
-            });
-            close();
-            return;
-          }
+              close();
 
-          const completedMessage = await completeAssistantMessage({
-            content: streamResult.data || assistantText,
-            contextTrace: mcpContext.contextTrace,
-            inputTokens: streamResult.usage.inputTokens,
-            messageId: assistantMessage.id,
-            model: streamResult.model,
-            outputTokens: streamResult.usage.outputTokens,
-            provider: streamResult.provider,
-          });
-
-          write({
-            type: "assistant_done",
-            message: completedMessage,
-          });
-          close();
+              return {
+                contextResultCount: mcpContext.mcpToolResults.length,
+                model: streamResult.model,
+                ok: true,
+                outputLength: completedMessage.content.length,
+                provider: streamResult.provider,
+              };
+            },
+          );
         } catch (error) {
           if (assistantMessageId) {
             if (assistantText.trim().length > 0) {
